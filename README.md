@@ -1,5 +1,5 @@
 ---
-title: Dash App Template
+title: Agentic Framework
 emoji: 📊
 sdk: docker
 app_file: app.py
