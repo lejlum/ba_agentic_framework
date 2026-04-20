@@ -1,0 +1,107 @@
+body {
+    font-family: 'Outfit', sans-serif;
+    background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%);
+    margin: 0;
+    padding: 20px;
+    min-height: 100vh;
+}
+
+.header {
+    background: linear-gradient(135deg, #ff6b35, #d43425);
+    padding: 20px 30px;
+    border-radius: 15px;
+    box-shadow: 0 8px 25px rgba(255, 107, 53, 0.3);
+    margin-bottom: 20px;
+}
+
+.control-card {
+    background: rgba(15, 15, 20, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.chart-card {
+    background: rgba(15, 15, 20, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.datacard {
+    background: linear-gradient(135deg, rgba(255, 107, 53, 0.1), rgba(212, 52, 37, 0.1));
+    border: 1px solid rgba(255, 107, 53, 0.3);
+    border-radius: 12px;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.datacard:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(255, 107, 53, 0.2);
+}
+
+.year-slider .mantine-Slider-track {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.year-slider .mantine-Slider-bar {
+    background: linear-gradient(90deg, #ff6b35, #d43425);
+}
+
+.year-slider .mantine-Slider-thumb {
+    background: #ff6b35;
+    border: 2px solid white;
+}
+
+.continent-select .mantine-Select-input,
+.country-select .mantine-Select-input {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.continent-select .mantine-Select-input:focus,
+.country-select .mantine-Select-input:focus {
+    border-color: #ff6b35;
+    box-shadow: 0 0 10px rgba(255, 107, 53, 0.3);
+}
+
+/* Custom scrollbar for dropdowns */
+.mantine-Select-dropdown {
+    background: rgba(15, 15, 20, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+}
+
+.mantine-Select-item {
+    color: white;
+}
+
+.mantine-Select-item:hover {
+    background: rgba(255, 107, 53, 0.2);
+}
+
+/* Graph styling adjustments */
+.js-plotly-plot {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+    
+    .header {
+        padding: 15px 20px;
+    }
+    
+    .control-card,
+    .chart-card {
+        margin: 10px 0;
+    }
+}
