@@ -1,9 +1,12 @@
-<<<<<<< HEAD
 .env
 upload_model.py
-=======
 .DS_Store
 .vscode/
+data/
+waste_recycling_chatbot_pa2/_archive_original/
+waste_recycling_chatbot_pa2/outputs/
+waste_recycling_chatbot_pa2/models/
+waste_recycling_chatbot_pa2/notebooks/
 
 # Build artifacts
 dash_ag_grid/*
@@ -293,4 +296,3 @@ bh_unicode_properties.cache
 # Sublime-github package stores a github token in this file
 # https://packagecontrol.io/packages/sublime-github
 GitHub.sublime-settings
->>>>>>> a07cb9600467df9cf89de6030776490d2913a8db
