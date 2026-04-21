@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TypedDict, Optional, List
 from dotenv import load_dotenv
 import requests
+from huggingface_hub import hf_hub_download
 
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
@@ -30,9 +31,19 @@ load_dotenv()
 # temperature 0.3 kept the same as PA2 to reduce hallucination risk
 llm = ChatOpenAI(model="gpt-4o", temperature=0.3)
 
-MODEL_PATH = "./models/baseline/finetuned_model.pth"
-if not Path(MODEL_PATH).exists():
-    MODEL_PATH = "../models/baseline/finetuned_model.pth"
+# load model from Hugging Face Hub - works both locally and on deployment
+# falls back to local path if HF download fails
+try:
+    MODEL_PATH = hf_hub_download(
+        repo_id="le7lum/swiss-waste-classifier",
+        filename="finetuned_model.pth"
+    )
+    print(f"[INFO] Model loaded from Hugging Face Hub")
+except Exception as e:
+    print(f"[DEBUG] HF download failed: {e} - trying local path")
+    MODEL_PATH = "./models/baseline/finetuned_model.pth"
+    if not Path(MODEL_PATH).exists():
+        MODEL_PATH = "../models/baseline/finetuned_model.pth"
 
 classifier = WasteClassifier(model_path=MODEL_PATH)
 
