@@ -7,7 +7,7 @@ ENV UV_SYSTEM_PYTHON=1
 
 WORKDIR /app
 
-COPY --chown=user ./waste_recycling_chatbot_pa2/requirements.txt requirements.txt
+COPY --chown=user ./requirements.txt requirements.txt
 RUN uv pip install -r requirements.txt
 
 COPY --chown=user . /app
