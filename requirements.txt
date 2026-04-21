@@ -1,0 +1,6 @@
+dash
+dash-mantine-components
+dash-iconify
+plotly
+pandas
+gunicorn
