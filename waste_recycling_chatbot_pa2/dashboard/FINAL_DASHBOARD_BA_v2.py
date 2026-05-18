@@ -85,6 +85,8 @@ app: Dash = Dash(
     assets_folder="assets",
 )
 
+server = app.server
+
 app.index_string = '''
 <!DOCTYPE html>
 <html>
