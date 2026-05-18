@@ -49,6 +49,54 @@ classifier = WasteClassifier(model_path=MODEL_PATH)
 
 
 # ===========================================================================
+# TEXT-TO-CATEGORY MAPPING
+# Maps common user terms to RECYCLING_GUIDE category keys.
+# This improves text-based queries where no image is uploaded.
+# ===========================================================================
+
+TEXT_CATEGORY_MAP = {
+    # English
+    "tetrapack": "composite_carton", "tetra pak": "composite_carton",
+    "juice box": "composite_carton", "milk carton": "composite_carton",
+    "cardboard": "cardboard", "carton": "cardboard",
+    "paper": "paper", "newspaper": "paper", "magazine": "paper",
+    "plastic bottle": "pet_bottles", "pet bottle": "pet_bottles", "pet": "pet_bottles",
+    "glass bottle": "white_glass", "wine bottle": "white_glass",
+    "beer bottle": "brown_glass",
+    "aluminium": "aluminium", "aluminum": "aluminium",
+    "tin can": "aluminium", "can": "aluminium",
+    "battery": "batteries", "batteries": "batteries",
+    "phone": "electronic_waste", "mobile": "electronic_waste",
+    "laptop": "electronic_waste", "electronics": "electronic_waste",
+    "clothes": "textiles", "clothing": "textiles",
+    "fabric": "textiles", "shoes": "textiles",
+    "food waste": "organic_waste", "compost": "organic_waste",
+    # German
+    "altpapier": "paper", "zeitung": "paper", "zeitschrift": "paper",
+    "karton": "cardboard", "pappe": "cardboard",
+    "plastikflasche": "pet_bottles",
+    "glasflasche": "white_glass", "weissglas": "white_glass",
+    "braunglas": "brown_glass", "grünglas": "green_glass",
+    "alu": "aluminium", "aludose": "aluminium", "dose": "aluminium",
+    "batterie": "batteries",
+    "handy": "electronic_waste", "elektroschrott": "electronic_waste",
+    "kleider": "textiles", "textilien": "textiles",
+    "kompost": "organic_waste", "speisereste": "organic_waste",
+}
+
+# Keywords that trigger the geolocation node
+LOCATION_KEYWORDS = [
+    # English
+    "where", "location", "collect", "collection point", "recycling centre",
+    "recycling center", "near me", "nearby", "drop off", "drop-off",
+    "bring", "take", "dispose near", "find", "closest",
+    # German
+    "wo", "sammelstelle", "entsorgung", "standort", "abgeben",
+    "bringen", "nächste", "in der nähe", "sammelstellen", "entsorgungshof"
+]
+
+
+# ===========================================================================
 # AGENT STATE
 # ===========================================================================
 
@@ -100,27 +148,34 @@ def get_coordinates(zip_code: str):
 
 
 def get_osm_collection_points(lat: float, lon: float, radius: int = 2000):
-    """Queries OpenStreetMap for recycling facilities within the given radius."""
+    """
+    Queries OpenStreetMap for recycling facilities within the given radius.
+    Tries two Overpass API mirrors with retry logic.
+    Returns empty list if both fail (caller handles fallback).
+    """
     query = f"""
-    [out:json][timeout:10];
+    [out:json][timeout:15];
     (
       node["amenity"="recycling"](around:{radius},{lat},{lon});
       node["amenity"="waste_disposal"](around:{radius},{lat},{lon});
     );
     out body;
     """
-    try:
-        response = requests.post(
-            "https://overpass-api.de/api/interpreter",
-            data={"data": query},
-            timeout=15
-        )
-        elements = response.json().get("elements", [])
-        print(f"[DEBUG] Overpass: {len(elements)} results")
-        return elements
-    except Exception as e:
-        print(f"[DEBUG] Overpass error: {e}")
-        return []
+    # try two Overpass mirrors in case one is down
+    mirrors = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter"
+    ]
+    for mirror in mirrors:
+        try:
+            response = requests.post(mirror, data={"data": query}, timeout=20)
+            elements = response.json().get("elements", [])
+            print(f"[DEBUG] Overpass ({mirror}): {len(elements)} results")
+            return elements
+        except Exception as e:
+            print(f"[DEBUG] Overpass mirror {mirror} failed: {e}")
+            continue
+    return []
 
 
 def format_collection_points(elements: list, municipality: str, zip_code: str, lang: str) -> str:
@@ -151,7 +206,10 @@ def format_collection_points(elements: list, municipality: str, zip_code: str, l
         if pet:     out += "\n♻️ PET / Plastik:\n"  + "".join(f"  • {s}\n" for s in pet[:2])
         if metal:   out += "\n🔩 Metall / Alu:\n"   + "".join(f"  • {s}\n" for s in metal[:2])
         if not (centres or glass or pet or metal):
-            out += "Keine Einträge in OpenStreetMap für diesen Bereich.\n"
+            out += f"Keine OpenStreetMap-Einträge gefunden.\n"
+            out += f"👉 Alle Sammelstellen in {municipality}: https://recycling-map.ch/de/karte?zip={zip_code}\n"
+        else:
+            out += f"\n👉 Alle Sammelstellen anzeigen: https://recycling-map.ch/de/karte?zip={zip_code}"
         out += "\n• Batterien: Gratis Rückgabe bei jedem Händler der Batterien verkauft"
     else:
         out = f"Collection points in {municipality} (ZIP {zip_code}, 2km radius):\n"
@@ -160,7 +218,10 @@ def format_collection_points(elements: list, municipality: str, zip_code: str, l
         if pet:     out += "\n♻️ PET / Plastic:\n"     + "".join(f"  • {s}\n" for s in pet[:2])
         if metal:   out += "\n🔩 Metal / Aluminium:\n" + "".join(f"  • {s}\n" for s in metal[:2])
         if not (centres or glass or pet or metal):
-            out += "No entries found in OpenStreetMap for this area.\n"
+            out += f"No OpenStreetMap entries found.\n"
+            out += f"👉 All collection points in {municipality}: https://recycling-map.ch/en/map?zip={zip_code}\n"
+        else:
+            out += f"\n👉 View all collection points: https://recycling-map.ch/en/map?zip={zip_code}"
         out += "\n• Batteries: Free return at any retailer selling batteries"
 
     return out.strip()
@@ -171,13 +232,13 @@ def format_collection_points(elements: list, municipality: str, zip_code: str, l
 # ===========================================================================
 
 def perception_node(state: AgentState) -> AgentState:
-    # detect input type: image path, location question, or plain text
+    # detect input type using expanded keyword list
     msg = state["user_message"].lower()
     image_path = state.get("image_path")
 
     if image_path and Path(image_path).exists():
         input_type = "image"
-    elif any(w in msg for w in ["where", "wo", "sammelstelle", "collect", "entsorgung", "standort", "location"]):
+    elif any(w in msg for w in LOCATION_KEYWORDS):
         input_type = "location"
     else:
         input_type = "text"
@@ -201,10 +262,21 @@ def classifier_node(state: AgentState) -> AgentState:
 
 
 def knowledge_base_node(state: AgentState) -> AgentState:
-    # fetch Swiss Recycle guidelines for the detected category (from PA2)
+    # fetch Swiss Recycle guidelines for the detected category
+    # for text queries: try to map user terms to a known category first
     lang = state.get("language", "en")
     classification = state.get("classification") or {}
     category = classification.get("category", "")
+
+    # if no image was classified, try text-based category mapping
+    if not category:
+        msg = state["user_message"].lower()
+        for term, mapped_category in TEXT_CATEGORY_MAP.items():
+            if term in msg:
+                category = mapped_category
+                print(f"[DEBUG] text mapped '{term}' -> '{category}'")
+                break
+
     guide = RECYCLING_GUIDE.get(category, {})
     guidelines = guide.get(lang, guide.get("en", "No guidelines found."))
     return {**state, "guidelines": guidelines}
@@ -212,19 +284,48 @@ def knowledge_base_node(state: AgentState) -> AgentState:
 
 def geolocation_node(state: AgentState) -> AgentState:
     # resolve ZIP code to coordinates, then query OpenStreetMap
+    # if Overpass fails completely, fall back to recycling-map.ch link
     zip_code = state.get("zip_code", "")
     lang = state.get("language", "en")
 
     if not zip_code:
-        return {**state, "collection_points": None}
+        if lang == "de":
+            return {**state, "collection_points": None, "final_response": 
+                "Bitte gib deine **PLZ** in der Sidebar ein (Feld 'PLZ') – dann zeige ich dir die nächsten Sammelstellen in deiner Nähe!"}
+        else:
+            return {**state, "collection_points": None, "final_response": 
+                "Please enter your **ZIP code** in the sidebar (field 'ZIP code') – then I'll show you the nearest collection points!"}
 
     coords = get_coordinates(zip_code)
     if not coords:
-        msg = f"ZIP {zip_code} not found. See https://www.swissrecycle.ch"
+        if lang == "de":
+            msg = f"PLZ {zip_code} nicht gefunden. Sammelstellen suchen: https://recycling-map.ch/de/karte?zip={zip_code}"
+        else:
+            msg = f"ZIP {zip_code} not found. Find collection points: https://recycling-map.ch/en/map?zip={zip_code}"
         return {**state, "collection_points": msg}
 
     lat, lon, municipality = coords
     elements = get_osm_collection_points(lat, lon)
+
+    # if Overpass returned nothing at all (API down), use recycling-map.ch directly
+    if elements is None or len(elements) == 0:
+        print(f"[DEBUG] No Overpass results - using recycling-map.ch fallback")
+        if lang == "de":
+            result = (
+                f"Sammelstellen in {municipality} (PLZ {zip_code}):\n\n"
+                f"👉 Alle Sammelstellen anzeigen: https://recycling-map.ch/de/karte?zip={zip_code}\n\n"
+                f"• Batterien: Gratis Rückgabe bei jedem Händler der Batterien verkauft\n"
+                f"• PET / Alu: COOP, Migros, Denner Filialen in Ihrer Gemeinde"
+            )
+        else:
+            result = (
+                f"Collection points in {municipality} (ZIP {zip_code}):\n\n"
+                f"👉 View all collection points: https://recycling-map.ch/en/map?zip={zip_code}\n\n"
+                f"• Batteries: Free return at any retailer selling batteries\n"
+                f"• PET / Alu: COOP, Migros, Denner branches in your municipality"
+            )
+        return {**state, "collection_points": result}
+
     result = format_collection_points(elements, municipality, zip_code, lang)
     return {**state, "collection_points": result}
 
@@ -237,18 +338,33 @@ def response_node(state: AgentState) -> AgentState:
     collection_points = state.get("collection_points", "")
     conv_history = state.get("conversation_history", [])
 
+    # improved system prompts with concise response instructions
     if lang == "de":
         system = """Du bist ein Experte für Schweizer Abfallwirtschaft nach Swiss Recycle Richtlinien.
+
+Regeln:
 - Beantworte nur Fragen zur Abfallentsorgung in der Schweiz
 - Basiere Antworten NUR auf den bereitgestellten Richtlinien
+- Halte Antworten kurz: maximal 4-5 Sätze
+- Nenne immer die spezifische Abfallkategorie beim Namen
+- Schlage immer eine konkrete Aktion vor
 - Verwende: Kehricht, Gemeinde, Entsorgungshof
-- Keine Links in der Antwort (wird automatisch hinzugefügt)"""
+- Wenn keine Richtlinie vorhanden ist, empfehle die Gemeinde zu kontaktieren
+- Keine zusätzlichen Links, aber recycling-map.ch Links aus dem Kontext beibehalten
+- Wiederhole keine Informationen die bereits im Gespräch genannt wurden"""
     else:
         system = """You are a Swiss waste management expert following Swiss Recycle guidelines.
+
+Rules:
 - Only answer questions about waste disposal in Switzerland
 - Base answers ONLY on the provided guidelines
-- Use: residual waste, municipality, recycling centre
-- Do not add links (appended automatically)"""
+- Keep answers concise: maximum 4-5 sentences
+- Always name the specific waste category
+- Always suggest one concrete action
+- Use Swiss terms: residual waste, municipality, recycling centre
+- If no guideline is available, recommend contacting the municipality
+- Do not add extra links, but keep any recycling-map.ch links from the context
+- Do not repeat information already given in the conversation"""
 
     context = ""
     if classification:
@@ -264,17 +380,20 @@ def response_node(state: AgentState) -> AgentState:
 
     user_content = f"{context}User: {state['user_message']}" if context else state["user_message"]
 
+    # include last 3 turns for better multi-turn context (increased from 2)
     messages = [SystemMessage(content=system)]
-    for turn in conv_history[-2:]:
+    for turn in conv_history[-3:]:
         messages.append(HumanMessage(content=turn["user"]))
         messages.append(SystemMessage(content=turn["assistant"]))
     messages.append(HumanMessage(content=user_content))
 
-    answer = llm.invoke(messages).content
-
-    if "swissrecycle.ch" not in answer.lower():
-        answer += "\n\nMore information: https://www.swissrecycle.ch" if lang == "en" \
-            else "\n\nWeitere Infos: https://www.swissrecycle.ch"
+    try:
+        answer = llm.invoke(messages).content
+    except Exception as e:
+        if lang == "de":
+            answer = f"Es ist ein Fehler aufgetreten. Bitte versuche es erneut. ({e})"
+        else:
+            answer = f"An error occurred. Please try again. ({e})"
 
     return {**state, "final_response": answer, "conversation_history": conv_history + [{"user": state["user_message"], "assistant": answer}]}
 
@@ -326,6 +445,12 @@ def route_after_knowledge_base(state: AgentState):
 # BUILD AGENT
 # ===========================================================================
 
+def route_after_geolocation(state: AgentState):
+    # if final_response already set (e.g. no ZIP code), skip GPT-4o
+    if state.get("final_response"):
+        return END
+    return "response"
+
 def build_agent():
     memory = MemorySaver()
     graph = StateGraph(AgentState)
@@ -342,7 +467,7 @@ def build_agent():
     graph.add_conditional_edges("perception",     route_after_perception)
     graph.add_conditional_edges("classifier",     route_after_classifier)
     graph.add_conditional_edges("knowledge_base", route_after_knowledge_base)
-    graph.add_edge("geolocation",   "response")
+    graph.add_conditional_edges("geolocation",    route_after_geolocation)
     graph.add_edge("response",      END)
     graph.add_edge("clarification", END)
 
@@ -382,7 +507,6 @@ def main():
         if not user_input:
             continue
 
-        # detect image paths (strip quotes Windows sometimes adds)
         image_path = None
         cleaned = user_input.strip("\"'")
         if any(cleaned.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp", ".bmp"]):

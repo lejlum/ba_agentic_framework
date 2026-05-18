@@ -12,6 +12,7 @@ import webbrowser
 import threading
 import tempfile
 import os
+import requests
 import sys
 from pathlib import Path
 from typing import Dict, List
@@ -51,6 +52,8 @@ def get_texts(language: str) -> Dict[str, str]:
             "image_analyzed": "Bild analysiert",
             "chat_history_label": "Verlauf",
             "detected": "Erkannt",
+            "map_button": "Alle Sammelstellen anzeigen",
+            "map_title": "Sammelstellen in der Nähe",
         }
     return {
         "title": "Swiss Recycling Assistant",
@@ -66,6 +69,8 @@ def get_texts(language: str) -> Dict[str, str]:
         "image_analyzed": "Image analyzed",
         "chat_history_label": "History",
         "detected": "Detected",
+        "map_button": "View all collection points",
+        "map_title": "Nearby collection points",
     }
 
 
@@ -77,8 +82,8 @@ app: Dash = Dash(
     external_stylesheets=[dbc.themes.BOOTSTRAP],
     title="Swiss Recycling Assistant",
     suppress_callback_exceptions=True,
+    assets_folder="assets",
 )
-server = app.server
 
 app.index_string = '''
 <!DOCTYPE html>
@@ -97,8 +102,6 @@ app.index_string = '''
                 color: #2c3e50;
             }
             #react-entry-point { flex: 1; display: flex; flex-direction: column; }
-
-            /* Sidebar - fixed, no re-render on message send */
             #sidebar {
                 position: fixed; top: 0; left: 0; bottom: 0; width: 280px;
                 background-color: #f8f9fa; border-right: 1px solid #e5e7eb;
@@ -111,15 +114,12 @@ app.index_string = '''
             #sidebar-sessions { flex: 1; overflow-y: auto; padding: 12px 16px; }
             #sidebar.collapsed #sidebar-header .sidebar-content { display: none; }
             #sidebar.collapsed #sidebar-sessions { display: none; }
-
-            /* Main content */
             #main-content {
                 margin-left: 280px; padding: 32px 48px 100px 48px;
                 min-height: calc(100vh - 100px); background-color: #ffffff;
                 transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             }
             #main-content.collapsed { margin-left: 72px; }
-
             .sidebar-section-label {
                 font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase;
                 letter-spacing: 0.05em; margin-bottom: 8px; padding-left: 2px;
@@ -192,41 +192,39 @@ app.index_string = '''
             .markdown-content a:hover { text-decoration: underline; }
             .markdown-content strong { font-weight: 600; color: #1a202c; }
             .image-result-card { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+            /* map card */
+            .map-card {
+                background-color: #f0f7ff; border: 1px solid #bfdbfe;
+                border-radius: 12px; padding: 12px; margin-top: 8px;
+                max-width: 65%;
+            }
+            .map-card iframe {
+                width: 100%; height: 280px; border: none;
+                border-radius: 8px; margin-top: 8px;
+            }
+            .map-btn {
+                display: inline-block; background-color: #4a7ba7; color: white !important;
+                padding: 8px 16px; border-radius: 8px; text-decoration: none !important;
+                font-size: 14px; font-weight: 500; margin-top: 8px;
+            }
+            .map-btn:hover { background-color: #3d6687; }
             ::-webkit-scrollbar { width: 8px; }
             ::-webkit-scrollbar-track { background: #f3f4f6; }
             ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
-
-            /* ── RESPONSIVE / MOBILE ── */
-            /* Tablet: 768px - 1024px */
             @media (max-width: 1024px) {
                 #sidebar { width: 220px; }
                 #main-content { margin-left: 220px; padding: 24px 24px 100px 24px; }
                 #main-content.collapsed { margin-left: 48px; }
             }
-
-            /* Mobile: under 768px - sidebar hidden by default */
             @media (max-width: 768px) {
                 #sidebar { width: 0px; overflow: hidden; border: none; }
-                #sidebar.open { width: 260px; overflow: visible; border-right: 1px solid #e5e7eb; }
+                #sidebar.open { width: 260px; overflow: visible; border-right: 1px solid #e5e7eb; box-shadow: 4px 0 20px rgba(0,0,0,0.15); z-index: 1100; }
                 #main-content { margin-left: 0px !important; padding: 16px 16px 100px 16px; }
                 #main-content.collapsed { margin-left: 0px; }
-
-                /* bigger touch targets on mobile */
                 .chat-input-group input { font-size: 16px; }
                 .chat-input-group .btn-send { padding: 14px 18px; }
-                .chat-input-group .btn-upload { padding: 14px 14px; }
-
-                /* chat bubbles full width on small screens */
-                div[style*="maxWidth: 65%"] { max-width: 88% !important; }
-
-                /* sidebar overlay on mobile */
-                #sidebar.open {
-                    box-shadow: 4px 0 20px rgba(0,0,0,0.15);
-                    z-index: 1100;
-                }
+                .map-card { max-width: 100%; }
             }
-
-            /* Very small screens */
             @media (max-width: 480px) {
                 #main-content { padding: 12px 12px 120px 12px; }
                 .app-footer { padding: 16px; font-size: 12px; }
@@ -255,10 +253,45 @@ AVATAR = {
 CHAT_ROW = {"display": "flex", "alignItems": "flex-end", "gap": "12px", "marginBottom": "20px"}
 
 
-# ---------------------------------------------------------------------------
-# LAYOUT - sidebar is static HTML, only session list updates via callback
-# This fixes the sidebar jump bug from the previous version
-# ---------------------------------------------------------------------------
+def make_map_card(zip_code: str, language: str):
+    """Creates a map card with embedded OSM map centered on the ZIP code."""
+    texts = get_texts(language)
+    lang_path = "de" if language == "de" else "en"
+    map_url = f"https://recycling-map.ch/{lang_path}/karte?zip={zip_code}"
+
+    try:
+        resp = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={
+                "postalcode": zip_code,
+                "country": "CH",
+                "format": "json",
+                "limit": 1
+            },
+            headers={"User-Agent": "SwissRecyclingAssistant/1.0"},
+            timeout=5
+        )
+        results = resp.json()
+        if results:
+            lat = float(results[0].get("lat", 47.38))
+            lon = float(results[0].get("lon", 8.54))
+        else:
+            lat, lon = 47.38, 8.54
+    except:
+        lat, lon = 47.38, 8.54
+
+    # calculate bbox around the coordinates (approx 10km radius)
+    delta = 0.04
+    bbox = f"{lon-delta},{lat-delta},{lon+delta},{lat+delta}"
+    osm_embed = f"https://www.openstreetmap.org/export/embed.html?bbox={bbox}&layer=mapnik&marker={lat},{lon}"
+
+    return html.Div([
+        html.Div(texts["map_title"], style={"fontWeight": "600", "fontSize": "14px", "color": "#1e40af", "marginBottom": "8px"}),
+        html.Iframe(src=osm_embed, style={"width": "100%", "height": "250px", "border": "none", "borderRadius": "8px", "marginBottom": "8px"}),
+        html.A(texts["map_button"], href=map_url, target="_blank", className="map-btn"),
+    ], className="map-card")
+
+
 app.layout = html.Div([
     dcc.Store(id="language-store", data="en"),
     dcc.Store(id="sessions-store", data={}),
@@ -267,19 +300,13 @@ app.layout = html.Div([
     dcc.Store(id="zip-store", data=""),
     dcc.Store(id="agent-history-store", data={}),
 
-    # SIDEBAR - static shell, only session list updates dynamically
     html.Div([
         html.Div([
-            # logo only - toggle button moved outside sidebar
             html.Div(
-                html.Span("Swiss Recycling Assistant", style={
-                    "fontSize": "15px", "fontWeight": "600", "color": "#1a202c",
-                }),
+                html.Span("Swiss Recycling Assistant", style={"fontSize": "15px", "fontWeight": "600", "color": "#1a202c"}),
                 className="sidebar-content",
                 style={"marginTop": "48px", "marginBottom": "20px", "paddingLeft": "2px"}
             ),
-
-            # language + zip + new chat - static, never re-renders
             html.Div([
                 html.Div([
                     html.Label("Language", id="language-label", className="sidebar-section-label"),
@@ -304,15 +331,10 @@ app.layout = html.Div([
                 ),
                 html.Div("History", id="history-label", className="sidebar-section-label", style={"marginBottom": "8px", "marginTop": "4px"}),
             ], className="sidebar-content"),
-
         ], id="sidebar-header"),
-
-        # only this div re-renders when sessions change
         html.Div(id="sidebar-sessions"),
-
     ], id="sidebar"),
 
-    # toggle button - fixed position, always visible, sits above sidebar content
     html.Div(
         dbc.Button(
             html.I(className="bi bi-list", style={"fontSize": "20px"}),
@@ -320,14 +342,9 @@ app.layout = html.Div([
             style={"color": "#4b5563", "padding": "8px"},
             n_clicks=0,
         ),
-        style={
-            "position": "fixed", "top": "10px", "left": "10px",
-            "zIndex": 1002, "backgroundColor": "#f8f9fa",
-            "borderRadius": "8px"
-        }
+        style={"position": "fixed", "top": "10px", "left": "10px", "zIndex": 1002, "backgroundColor": "#f8f9fa", "borderRadius": "8px"}
     ),
 
-    # MAIN CONTENT
     html.Div([
         html.Div(id="chat-content"),
         html.Div(
@@ -348,7 +365,11 @@ app.layout = html.Div([
         html.Div([
             html.A("BAFU", href="https://www.bafu.admin.ch", target="_blank"),
             html.Span(" · ", style={"color": "#d1d5db", "margin": "0 8px"}),
+            html.A("IGORA", href="https://www.igora.ch/de/sammelstellen", target="_blank"),
+            html.Span(" · ", style={"color": "#d1d5db", "margin": "0 8px"}),
             html.A("PET Recycling", href="https://www.petrecycling.ch/de/sammelstellen", target="_blank"),
+            html.Span(" · ", style={"color": "#d1d5db", "margin": "0 8px"}),
+            html.A("Swiss Recycle", href="https://www.swissrecycle.ch", target="_blank"),
             html.Span(" · ", style={"color": "#d1d5db", "margin": "0 8px"}),
             html.A("VetroSwiss", href="https://www.vetroswiss.ch/de/sammelstellen", target="_blank"),
         ])
@@ -364,13 +385,10 @@ app.layout = html.Div([
 def save_zip(value):
     return value or ""
 
-
 @app.callback(Output("language-store", "data"), Input("language-dropdown", "value"))
 def update_language(lang):
     return lang or "en"
 
-
-# update labels when language changes - does NOT touch sidebar structure
 @app.callback(
     [Output("language-label", "children"), Output("zip-label", "children"),
      Output("new-chat-label", "children"), Output("history-label", "children"),
@@ -382,8 +400,6 @@ def update_labels(language):
     return (texts["language_label"], texts["zip_label"], texts["new_chat"],
             texts["chat_history_label"], texts["chat_input"], f" {texts['upload_button']}")
 
-
-# sidebar toggle: only changes CSS class, no re-render of sidebar content
 @app.callback(
     [Output("sidebar", "className"), Output("main-content", "className")],
     Input("sidebar-toggle", "n_clicks"),
@@ -392,20 +408,15 @@ def update_labels(language):
 )
 def toggle_sidebar(n_clicks, collapsed):
     new_collapsed = not collapsed
-    # on desktop: add "collapsed" class to hide
-    # on mobile: CSS media query handles layout, sidebar gets "open" when not collapsed
     sidebar_class = "collapsed" if new_collapsed else "open"
     main_class = "collapsed" if new_collapsed else ""
     return sidebar_class, main_class
-
 
 @app.callback(Output("sidebar-collapsed-store", "data"), Input("sidebar-toggle", "n_clicks"),
               State("sidebar-collapsed-store", "data"), prevent_initial_call=True)
 def save_collapsed(n_clicks, collapsed):
     return not collapsed
 
-
-# only the session list updates - not the whole sidebar
 @app.callback(
     Output("sidebar-sessions", "children"),
     [Input("sessions-store", "data"), Input("active-session-store", "data"), Input("language-store", "data")],
@@ -438,12 +449,12 @@ def update_session_list(sessions, active_session, language):
         ], className=f"chat-history-item {'active' if sid == active_session else ''}"))
     return items
 
-
 @app.callback(
     Output("chat-content", "children"),
-    [Input("language-store", "data"), Input("sessions-store", "data"), Input("active-session-store", "data")],
+    [Input("language-store", "data"), Input("sessions-store", "data"), Input("active-session-store", "data"),
+     Input("zip-store", "data")],
 )
-def render_chat(language, sessions, active_session):
+def render_chat(language, sessions, active_session, zip_code):
     texts = get_texts(language)
     messages = (sessions or {}).get(active_session, []) if active_session else []
     if not messages:
@@ -471,6 +482,17 @@ def render_chat(language, sessions, active_session):
                     html.Div(msg.get("result_data", {}).get("content", [])),
                 ], className="image-result-card")], style={**CHAT_BUBBLE_BOT, "backgroundColor": "transparent", "border": "none", "padding": "0"}),
             ], style=CHAT_ROW)
+        elif msg.get("role") == "location_result":
+            # special location message with map card
+            zip_used = msg.get("zip_code", zip_code)
+            lang_used = msg.get("language", language)
+            return html.Div([
+                html.Img(src="/assets/robo_head.png", style=AVATAR),
+                html.Div([
+                    html.Div(dcc.Markdown(msg.get("content", ""), className="markdown-content", style={"margin": 0}), style=CHAT_BUBBLE_BOT),
+                    make_map_card(zip_used, lang_used) if zip_used else None,
+                ]),
+            ], style=CHAT_ROW)
         else:
             return html.Div([
                 html.Img(src="/assets/robo_head.png", style=AVATAR),
@@ -478,7 +500,6 @@ def render_chat(language, sessions, active_session):
             ], style=CHAT_ROW)
 
     return html.Div([make_msg(m) for m in messages], style={"padding": "28px 0", "maxWidth": "920px", "margin": "0 auto"})
-
 
 @app.callback(
     [Output("sessions-store", "data", allow_duplicate=True), Output("active-session-store", "data", allow_duplicate=True)],
@@ -493,7 +514,6 @@ def new_chat(n_clicks, sessions):
     sessions[new_id] = []
     return sessions, new_id
 
-
 @app.callback(
     Output("active-session-store", "data", allow_duplicate=True),
     Input({"type": "session-select", "index": ALL}, "n_clicks"),
@@ -503,7 +523,6 @@ def select_session(n_clicks):
     if not ctx.triggered_id or not any(n_clicks):
         raise dash.exceptions.PreventUpdate
     return ctx.triggered_id["index"]
-
 
 @app.callback(
     [Output("sessions-store", "data", allow_duplicate=True), Output("active-session-store", "data", allow_duplicate=True)],
@@ -520,7 +539,6 @@ def delete_session(n_clicks, sessions, active_session):
         del sessions[sid]
     new_active = active_session if active_session != sid else (list(sessions.keys())[0] if sessions else "")
     return sessions, new_active
-
 
 @app.callback(
     [Output("sessions-store", "data", allow_duplicate=True),
@@ -556,6 +574,8 @@ def send_message(n_clicks, n_submit, user_text, sessions, active_session, langua
         )
         result = agent.invoke(state, config={"configurable": {"thread_id": active_session}})
         response = result["final_response"]
+        input_type = result.get("input_type", "text")
+
         agent_history[active_session] = {
             "scan_history": result.get("scan_history", []),
             "conv_history": result.get("conversation_history", []),
@@ -563,15 +583,25 @@ def send_message(n_clicks, n_submit, user_text, sessions, active_session, langua
     except Exception as e:
         logger.error(f"Agent error: {e}")
         response = f"Error: {e}"
+        input_type = "text"
 
-    sessions[active_session].append({"role": "assistant", "content": response})
+    # use location_result role when it was a location query with a ZIP code
+    # this triggers the map card in the chat
+    if input_type == "location" and zip_code:
+        sessions[active_session].append({
+            "role": "location_result",
+            "content": response,
+            "zip_code": zip_code,
+            "language": language or "en"
+        })
+    else:
+        sessions[active_session].append({"role": "assistant", "content": response})
+
     return sessions, active_session, agent_history
-
 
 @app.callback(Output("chat-input", "value"), [Input("send-button", "n_clicks"), Input("chat-input", "n_submit")], prevent_initial_call=True)
 def clear_input(n_clicks, n_submit):
     return ""
-
 
 @app.callback(
     [Output("sessions-store", "data", allow_duplicate=True),
