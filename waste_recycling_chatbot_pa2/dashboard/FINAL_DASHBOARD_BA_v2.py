@@ -33,9 +33,6 @@ logger = logging.getLogger(__name__)
 agent = build_agent()
 
 
-# ---------------------------------------------------------------------------
-# UI TEXT
-# ---------------------------------------------------------------------------
 def get_texts(language: str) -> Dict[str, str]:
     if language == "de":
         return {
@@ -74,9 +71,6 @@ def get_texts(language: str) -> Dict[str, str]:
     }
 
 
-# ---------------------------------------------------------------------------
-# DASH APP
-# ---------------------------------------------------------------------------
 app: Dash = Dash(
     __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
@@ -194,15 +188,10 @@ app.index_string = '''
             .markdown-content a:hover { text-decoration: underline; }
             .markdown-content strong { font-weight: 600; color: #1a202c; }
             .image-result-card { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-            /* map card */
             .map-card {
                 background-color: #f0f7ff; border: 1px solid #bfdbfe;
                 border-radius: 12px; padding: 12px; margin-top: 8px;
                 max-width: 65%;
-            }
-            .map-card iframe {
-                width: 100%; height: 280px; border: none;
-                border-radius: 8px; margin-top: 8px;
             }
             .map-btn {
                 display: inline-block; background-color: #4a7ba7; color: white !important;
@@ -210,6 +199,14 @@ app.index_string = '''
                 font-size: 14px; font-weight: 500; margin-top: 8px;
             }
             .map-btn:hover { background-color: #3d6687; }
+            /* mobile overlay */
+            #mobile-overlay {
+                display: none;
+                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.3);
+                z-index: 1099;
+            }
+            #mobile-overlay.visible { display: block; }
             ::-webkit-scrollbar { width: 8px; }
             ::-webkit-scrollbar-track { background: #f3f4f6; }
             ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
@@ -256,20 +253,13 @@ CHAT_ROW = {"display": "flex", "alignItems": "flex-end", "gap": "12px", "marginB
 
 
 def make_map_card(zip_code: str, language: str):
-    """Creates a map card with embedded OSM map centered on the ZIP code."""
     texts = get_texts(language)
     lang_path = "de" if language == "de" else "en"
     map_url = f"https://recycling-map.ch/{lang_path}/karte?zip={zip_code}"
-
     try:
         resp = requests.get(
             "https://nominatim.openstreetmap.org/search",
-            params={
-                "postalcode": zip_code,
-                "country": "CH",
-                "format": "json",
-                "limit": 1
-            },
+            params={"postalcode": zip_code, "country": "CH", "format": "json", "limit": 1},
             headers={"User-Agent": "SwissRecyclingAssistant/1.0"},
             timeout=5
         )
@@ -281,12 +271,9 @@ def make_map_card(zip_code: str, language: str):
             lat, lon = 47.38, 8.54
     except:
         lat, lon = 47.38, 8.54
-
-    # calculate bbox around the coordinates (approx 10km radius)
     delta = 0.04
     bbox = f"{lon-delta},{lat-delta},{lon+delta},{lat+delta}"
     osm_embed = f"https://www.openstreetmap.org/export/embed.html?bbox={bbox}&layer=mapnik&marker={lat},{lon}"
-
     return html.Div([
         html.Div(texts["map_title"], style={"fontWeight": "600", "fontSize": "14px", "color": "#1e40af", "marginBottom": "8px"}),
         html.Iframe(src=osm_embed, style={"width": "100%", "height": "250px", "border": "none", "borderRadius": "8px", "marginBottom": "8px"}),
@@ -337,6 +324,7 @@ app.layout = html.Div([
         html.Div(id="sidebar-sessions"),
     ], id="sidebar"),
 
+    # toggle button - always on top
     html.Div(
         dbc.Button(
             html.I(className="bi bi-list", style={"fontSize": "20px"}),
@@ -344,8 +332,11 @@ app.layout = html.Div([
             style={"color": "#4b5563", "padding": "8px"},
             n_clicks=0,
         ),
-        style={"position": "fixed", "top": "10px", "left": "10px", "zIndex": 1002, "backgroundColor": "#f8f9fa", "borderRadius": "8px"}
+        style={"position": "fixed", "top": "10px", "left": "10px", "zIndex": 1200, "backgroundColor": "#f8f9fa", "borderRadius": "8px"}
     ),
+
+    # mobile overlay - tap to close sidebar
+    html.Div(id="mobile-overlay", n_clicks=0),
 
     html.Div([
         html.Div(id="chat-content"),
@@ -403,20 +394,32 @@ def update_labels(language):
             texts["chat_history_label"], texts["chat_input"], f" {texts['upload_button']}")
 
 @app.callback(
-    [Output("sidebar", "className"), Output("main-content", "className")],
-    Input("sidebar-toggle", "n_clicks"),
+    [Output("sidebar", "className"),
+     Output("main-content", "className"),
+     Output("mobile-overlay", "className")],
+    [Input("sidebar-toggle", "n_clicks"),
+     Input("mobile-overlay", "n_clicks")],
     State("sidebar-collapsed-store", "data"),
     prevent_initial_call=True,
 )
-def toggle_sidebar(n_clicks, collapsed):
+def toggle_sidebar(toggle_clicks, overlay_clicks, collapsed):
+    if ctx.triggered_id == "mobile-overlay":
+        return "collapsed", "collapsed", ""
     new_collapsed = not collapsed
     sidebar_class = "collapsed" if new_collapsed else "open"
     main_class = "collapsed" if new_collapsed else ""
-    return sidebar_class, main_class
+    overlay_class = "" if new_collapsed else "visible"
+    return sidebar_class, main_class, overlay_class
 
-@app.callback(Output("sidebar-collapsed-store", "data"), Input("sidebar-toggle", "n_clicks"),
-              State("sidebar-collapsed-store", "data"), prevent_initial_call=True)
-def save_collapsed(n_clicks, collapsed):
+@app.callback(
+    Output("sidebar-collapsed-store", "data"),
+    [Input("sidebar-toggle", "n_clicks"), Input("mobile-overlay", "n_clicks")],
+    State("sidebar-collapsed-store", "data"),
+    prevent_initial_call=True
+)
+def save_collapsed(toggle_clicks, overlay_clicks, collapsed):
+    if ctx.triggered_id == "mobile-overlay":
+        return True
     return not collapsed
 
 @app.callback(
@@ -485,7 +488,6 @@ def render_chat(language, sessions, active_session, zip_code):
                 ], className="image-result-card")], style={**CHAT_BUBBLE_BOT, "backgroundColor": "transparent", "border": "none", "padding": "0"}),
             ], style=CHAT_ROW)
         elif msg.get("role") == "location_result":
-            # special location message with map card
             zip_used = msg.get("zip_code", zip_code)
             lang_used = msg.get("language", language)
             return html.Div([
@@ -555,18 +557,14 @@ def delete_session(n_clicks, sessions, active_session):
 def send_message(n_clicks, n_submit, user_text, sessions, active_session, language, zip_code, agent_history):
     if (not n_clicks and not n_submit) or not user_text or not user_text.strip():
         raise dash.exceptions.PreventUpdate
-
     sessions = sessions or {}
     agent_history = agent_history or {}
-
     if not active_session or active_session not in sessions:
         active_session = str(uuid.uuid4())[:8]
         sessions[active_session] = []
-
     user_text = user_text.strip()
     sessions[active_session].append({"role": "user", "content": user_text})
     session_state = agent_history.get(active_session, {"scan_history": [], "conv_history": []})
-
     try:
         state = AgentState(
             user_message=user_text, image_path=None, zip_code=zip_code or None,
@@ -577,7 +575,6 @@ def send_message(n_clicks, n_submit, user_text, sessions, active_session, langua
         result = agent.invoke(state, config={"configurable": {"thread_id": active_session}})
         response = result["final_response"]
         input_type = result.get("input_type", "text")
-
         agent_history[active_session] = {
             "scan_history": result.get("scan_history", []),
             "conv_history": result.get("conversation_history", []),
@@ -586,19 +583,13 @@ def send_message(n_clicks, n_submit, user_text, sessions, active_session, langua
         logger.error(f"Agent error: {e}")
         response = f"Error: {e}"
         input_type = "text"
-
-    # use location_result role when it was a location query with a ZIP code
-    # this triggers the map card in the chat
     if input_type == "location" and zip_code:
         sessions[active_session].append({
-            "role": "location_result",
-            "content": response,
-            "zip_code": zip_code,
-            "language": language or "en"
+            "role": "location_result", "content": response,
+            "zip_code": zip_code, "language": language or "en"
         })
     else:
         sessions[active_session].append({"role": "assistant", "content": response})
-
     return sessions, active_session, agent_history
 
 @app.callback(Output("chat-input", "value"), [Input("send-button", "n_clicks"), Input("chat-input", "n_submit")], prevent_initial_call=True)
@@ -617,15 +608,12 @@ def clear_input(n_clicks, n_submit):
 def handle_image(contents, filename, language, sessions, active_session, zip_code, agent_history):
     if not contents:
         raise dash.exceptions.PreventUpdate
-
     sessions = sessions or {}
     agent_history = agent_history or {}
     texts = get_texts(language)
-
     if not active_session or active_session not in sessions:
         active_session = str(uuid.uuid4())[:8]
         sessions[active_session] = []
-
     try:
         header, encoded = contents.split(",", 1)
         img_bytes = base64.b64decode(encoded)
@@ -633,7 +621,6 @@ def handle_image(contents, filename, language, sessions, active_session, zip_cod
         tmp_path = os.path.join(tempfile.gettempdir(), f"upload_{uuid.uuid4().hex}{suffix}")
         with open(tmp_path, "wb") as f:
             f.write(img_bytes)
-
         session_state = agent_history.get(active_session, {"scan_history": [], "conv_history": []})
         state = AgentState(
             user_message="How do I dispose of this?" if language == "en" else "Wie entsorge ich das?",
@@ -646,7 +633,6 @@ def handle_image(contents, filename, language, sessions, active_session, zip_cod
         classification = result.get("classification") or {}
         category = classification.get("category", "unknown").replace("_", " ").title()
         confidence = classification.get("confidence", 0)
-
         result_content = [
             html.H5(f"{texts['detected']}: {category}", style={"fontWeight": "600", "marginBottom": "8px", "fontSize": "17px", "color": "#1a202c"}),
             html.P(f"{texts['confidence']}: {confidence:.0%}", style={"color": "#10b981", "fontSize": "14px", "marginBottom": "14px", "fontWeight": "500"}),
@@ -660,18 +646,13 @@ def handle_image(contents, filename, language, sessions, active_session, zip_cod
             os.remove(tmp_path)
         except:
             pass
-
     except Exception as e:
         logger.error(f"Image error: {e}")
         result_content = [html.Div(f"Error: {e}", style={"color": "#dc2626", "fontWeight": "500"})]
-
     sessions[active_session].append({"role": "image_result", "image_src": contents, "result_data": {"content": result_content}})
     return sessions, active_session, agent_history
 
 
-# ---------------------------------------------------------------------------
-# MAIN
-# ---------------------------------------------------------------------------
 def open_browser():
     webbrowser.open("http://127.0.0.1:8050/")
 
