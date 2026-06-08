@@ -3,12 +3,6 @@
 Swiss Recycling Assistant - Dashboard (Bachelor Thesis)
 =======================================================
 
-Changes applied:
-  1. Google Maps link directly in Leaflet popup (removed map-click callbacks)
-  2. User message shown immediately with animated thinking bubble
-  3. City/Ort name input in addition to ZIP
-  4. location_result: only map card shown — no duplicate text bubble.
-     The Google Maps link (+ address + opening hours) lives in each popup.
 """
 
 import base64
@@ -25,7 +19,6 @@ from typing import Dict, List
 
 import dash
 from dash import Dash, html, dcc, Input, Output, State, ctx, ALL
-from flask import request as flask_request, Response
 import dash_bootstrap_components as dbc
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -51,9 +44,6 @@ def get_texts(language: str) -> Dict[str, str]:
             "new_chat": "Neuer Chat",
             "language_label": "Sprache",
             "zip_label": "PLZ",
-            "city_label": "Ort",
-            "zip_placeholder": "z.B. 8820",
-            "city_placeholder": "z.B. Wädenswil",
             "confidence": "Konfidenz",
             "welcome_title": "Hi, ich bin dein Swiss Recycling Assistant",
             "welcome_text": "Du bist unsicher, wie du etwas in der Schweiz recyceln sollst? Lade ein Foto deines Abfalls hoch oder stelle mir einfach direkt deine Frage.",
@@ -71,9 +61,6 @@ def get_texts(language: str) -> Dict[str, str]:
         "new_chat": "New Chat",
         "language_label": "Language",
         "zip_label": "ZIP code",
-        "city_label": "City",
-        "zip_placeholder": "e.g. 8820",
-        "city_placeholder": "e.g. Wädenswil",
         "confidence": "Confidence",
         "welcome_title": "Hi, I'm your Swiss Recycling Assistant",
         "welcome_text": "Not sure how to recycle something in Switzerland? Upload a picture of your waste item or just ask me directly.",
@@ -99,132 +86,6 @@ app: Dash = Dash(
 )
 
 server = app.server
-
-
-def build_map_html(zip_code, lat, lon, language):
-    """Build standalone map HTML served via Flask route."""
-    home_label   = "Ihr Standort"    if language == "de" else "Your location"
-    lbl_address  = "Adresse"         if language == "de" else "Address"
-    lbl_hours    = "Oeffnungszeiten" if language == "de" else "Opening hours"
-    lbl_no_hours = "Nicht angegeben" if language == "de" else "Not specified"
-    cat_glass    = "Glascontainer"   if language == "de" else "Glass"
-    cat_pet      = "PET / Plastik"   if language == "de" else "PET / Plastic"
-    cat_metal    = "Metall / Alu"    if language == "de" else "Metal"
-    cat_centre   = "Entsorgungshof"  if language == "de" else "Recycling Centre"
-    btn_all      = "Alle"            if language == "de" else "All"
-    btn_glass    = "Glas"            if language == "de" else "Glass"
-    btn_metal    = "Metall"          if language == "de" else "Metal"
-    lbl_gmaps    = "In Google Maps öffnen" if language == "de" else "Open in Google Maps"
-
-    return f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>
-  body {{ margin:0; padding:0; font-family: -apple-system, sans-serif; }}
-  #map {{ width:100%; height:280px; }}
-  #filters {{ padding:6px 8px; background:#f8fafc; border-bottom:1px solid #e2e8f0; display:flex; gap:6px; flex-wrap:wrap; }}
-  .filter-btn {{ padding:4px 12px; border-radius:20px; border:1.5px solid #cbd5e1; background:white; font-size:12px; cursor:pointer; transition:all 0.15s; font-weight:500; color:#475569; }}
-  .filter-btn.active {{ border-color:#3b82f6; background:#eff6ff; color:#1d4ed8; }}
-</style>
-</head>
-<body>
-<div id="filters">
-  <button class="filter-btn active" onclick="filterMarkers('all',this)">{btn_all}</button>
-  <button class="filter-btn" onclick="filterMarkers('glass',this)" style="border-color:#31a354;color:#166534;">{btn_glass} &#x1F7E2;</button>
-  <button class="filter-btn" onclick="filterMarkers('pet',this)" style="border-color:#fd8d3c;color:#9a3412;">PET &#x1F7E0;</button>
-  <button class="filter-btn" onclick="filterMarkers('metal',this)" style="border-color:#636363;color:#374151;">{btn_metal} &#x26AB;</button>
-  <button class="filter-btn" onclick="filterMarkers('centre',this)" style="border-color:#de2d26;color:#991b1b;">{cat_centre} &#x1F534;</button>
-</div>
-<div id="map"></div>
-<script>
-var map = L.map('map').setView([{lat}, {lon}], 15);
-L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
-    attribution: '&copy; OpenStreetMap contributors'
-}}).addTo(map);
-
-var homeIcon = L.divIcon({{
-    html: '<div style="background:#2563eb;width:16px;height:16px;border-radius:50%;border:3px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.5)"></div>',
-    iconSize:[16,16], iconAnchor:[8,8], className:''
-}});
-L.marker([{lat},{lon}], {{icon:homeIcon}})
- .bindPopup('<b>{home_label}</b><br>ZIP {zip_code}').addTo(map);
-
-var allMarkers = [];
-
-function filterMarkers(type, btn) {{
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    allMarkers.forEach(function(m) {{
-        if (type === 'all' || m.catKey === type) map.addLayer(m.marker);
-        else map.removeLayer(m.marker);
-    }});
-}}
-
-function makeIcon(color) {{
-    return L.divIcon({{
-        html: '<div style="background:'+color+';width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div>',
-        iconSize:[14,14], iconAnchor:[7,7], className:''
-    }});
-}}
-
-function procBM(el) {{
-    if(!el.lat||!el.lon) return;
-    var tags=el.tags||{{}};
-    var name=tags.name||'Collection point';
-    var street=tags['addr:street']||''; var number=tags['addr:housenumber']||'';
-    var address=street?(street+' '+number).trim():'';
-    var hours=tags['opening_hours']||'{lbl_no_hours}';
-    var color='#6baed6'; var cat='{cat_glass}'; var catKey='other';
-    if(tags['recycling:glass_bottles']==='yes'||tags['recycling:glass']==='yes')
-        {{color='#31a354';cat='{cat_glass}';catKey='glass';}}
-    else if(tags['recycling:plastic_bottles']==='yes'||tags['recycling:PET']==='yes')
-        {{color='#fd8d3c';cat='{cat_pet}';catKey='pet';}}
-    else if(tags['recycling:scrap_metal']==='yes'||tags['recycling:metal']==='yes')
-        {{color='#636363';cat='{cat_metal}';catKey='metal';}}
-    else if(tags.amenity==='waste_disposal'||tags.recycling_type==='centre')
-        {{color='#de2d26';cat='{cat_centre}';catKey='centre';}}
-    else if(tags.shop==='supermarket')
-        {{color='#7c3aed';cat='{cat_pet}';catKey='pet';}}
-
-    var gmaps = 'https://www.google.com/maps?q=' + el.lat + ',' + el.lon;
-
-    var popup='<b>'+name+'</b><br><span style="color:#64748b;font-size:12px">'+cat+'</span>';
-    if(address) popup+='<br><small>&#128205; {lbl_address}: '+address+'</small>';
-    popup+='<br><small>&#128336; {lbl_hours}: '+hours+'</small>';
-    popup+='<br><small><a href="'+gmaps+'" target="_blank" style="color:#2563eb;">{lbl_gmaps}</a></small>';
-
-    var marker=L.marker([el.lat,el.lon],{{icon:makeIcon(color)}})
-        .bindPopup(popup).bindTooltip(cat+': '+name)
-        .addTo(map);
-    allMarkers.push({{marker:marker, catKey:catKey}});
-}}
-fetch('https://overpass-api.de/api/interpreter', {{
-    method:'POST',
-    body:'data='+encodeURIComponent('[out:json][timeout:15];(node["amenity"="recycling"](around:3000,{lat},{lon});node["amenity"="waste_disposal"](around:3000,{lat},{lon}););out body;'),
-    headers:{{'Content-Type':'application/x-www-form-urlencoded'}}
-}}).then(r=>r.json()).then(d=>(d.elements||[]).forEach(procBM)).catch(e=>console.log('q1:',e));
-fetch('https://overpass-api.de/api/interpreter', {{
-    method:'POST',
-    body:'data='+encodeURIComponent('[out:json][timeout:10];node["shop"="supermarket"](around:1500,{lat},{lon});out body;'),
-    headers:{{'Content-Type':'application/x-www-form-urlencoded'}}
-}}).then(r=>r.json()).then(d=>(d.elements||[]).filter(el=>/coop|migros|denner|lidl|aldi/i.test((el.tags&&el.tags.name)||'')).forEach(procBM)).catch(e=>console.log('q2:',e));
-</script>
-</body>
-</html>"""
-
-
-@server.route('/map')
-def serve_map():
-    zip_code = flask_request.args.get('zip', '')
-    lat = float(flask_request.args.get('lat', 47.38))
-    lon = float(flask_request.args.get('lon', 8.54))
-    language = flask_request.args.get('lang', 'en')
-    html_content = build_map_html(zip_code, lat, lon, language)
-    return Response(html_content, mimetype='text/html')
-
 
 app.index_string = '''
 <!DOCTYPE html>
@@ -333,13 +194,14 @@ app.index_string = '''
             .markdown-content a:hover { text-decoration: underline; }
             .markdown-content strong { font-weight: 600; color: #1a202c; }
             .image-result-card { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+            /* map card */
             .map-card {
                 background-color: #f0f7ff; border: 1px solid #bfdbfe;
                 border-radius: 12px; padding: 12px; margin-top: 8px;
-                max-width: 100%;
+                max-width: 65%;
             }
             .map-card iframe {
-                width: 100%; height: 380px; border: none;
+                width: 100%; height: 280px; border: none;
                 border-radius: 8px; margin-top: 8px;
             }
             .map-btn {
@@ -348,7 +210,6 @@ app.index_string = '''
                 font-size: 14px; font-weight: 500; margin-top: 8px;
             }
             .map-btn:hover { background-color: #3d6687; }
-            @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
             ::-webkit-scrollbar { width: 8px; }
             ::-webkit-scrollbar-track { background: #f3f4f6; }
             ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
@@ -394,141 +255,43 @@ AVATAR = {
 CHAT_ROW = {"display": "flex", "alignItems": "flex-end", "gap": "12px", "marginBottom": "20px"}
 
 
-def make_map_card(zip_code: str, language: str, city: str = "", elements: list = None, lat: float = None, lon: float = None):
-    """Interactive Leaflet map.
-    Geocoding is done entirely client-side (JS → Nominatim) so it is not
-    blocked by Python network issues or Dash callback timeouts.
-    """
+def make_map_card(zip_code: str, language: str):
+    """Creates a map card with embedded OSM map centered on the ZIP code."""
     texts = get_texts(language)
-    location_label = zip_code or city or "CH"
-    # Safe JS string: escape single quotes
-    query_str = (zip_code or city or "Schweiz").replace("'", "\\'")
+    lang_path = "de" if language == "de" else "en"
+    map_url = f"https://recycling-map.ch/{lang_path}/karte?zip={zip_code}"
 
-    home_label    = "Ihr Standort"    if language == "de" else "Your location"
-    lbl_address   = "Adresse"         if language == "de" else "Address"
-    lbl_hours     = "Oeffnungszeiten" if language == "de" else "Opening hours"
-    lbl_no_hours  = "Nicht angegeben" if language == "de" else "Not specified"
-    cat_glass     = "Glascontainer"   if language == "de" else "Glass"
-    cat_pet       = "PET / Plastik"   if language == "de" else "PET / Plastic"
-    cat_metal     = "Metall / Alu"    if language == "de" else "Metal"
-    cat_centre    = "Entsorgungshof"  if language == "de" else "Recycling Centre"
-    btn_all       = "Alle"            if language == "de" else "All"
-    btn_glass     = "Glas"            if language == "de" else "Glass"
-    btn_metal     = "Metall"          if language == "de" else "Metal"
-    btn_supermarkt = "Laden"          if language == "de" else "Store"
-    lbl_gmaps     = "In Google Maps \u00f6ffnen" if language == "de" else "Open in Google Maps"
+    try:
+        resp = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={
+                "postalcode": zip_code,
+                "country": "CH",
+                "format": "json",
+                "limit": 1
+            },
+            headers={"User-Agent": "SwissRecyclingAssistant/1.0"},
+            timeout=5
+        )
+        results = resp.json()
+        if results:
+            lat = float(results[0].get("lat", 47.38))
+            lon = float(results[0].get("lon", 8.54))
+        else:
+            lat, lon = 47.38, 8.54
+    except:
+        lat, lon = 47.38, 8.54
 
-    map_html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>
-  body {{ margin:0; padding:0; font-family:-apple-system,sans-serif; }}
-  #map {{ width:100%; height:300px; }}
-  #filters {{ padding:6px 8px; background:#f8fafc; border-bottom:1px solid #e2e8f0; display:flex; gap:6px; flex-wrap:wrap; }}
-  .fb {{ padding:4px 12px; border-radius:20px; border:1.5px solid #cbd5e1; background:white; font-size:12px; cursor:pointer; font-weight:500; color:#475569; }}
-  .fb.active {{ border-color:#3b82f6; background:#eff6ff; color:#1d4ed8; }}
-</style>
-</head>
-<body>
-<div id="filters">
-  <button class="fb active" onclick="fm('all',this)">{btn_all}</button>
-  <button class="fb" onclick="fm('glass',this)" style="border-color:#31a354;color:#166534;">{btn_glass}</button>
-  <button class="fb" onclick="fm('pet',this)" style="border-color:#fd8d3c;color:#9a3412;">PET</button>
-  <button class="fb" onclick="fm('metal',this)" style="border-color:#636363;color:#374151;">{btn_metal}</button>
-  <button class="fb" onclick="fm('centre',this)" style="border-color:#de2d26;color:#991b1b;">{cat_centre}</button>
-  <button class="fb" onclick="fm('store',this)" style="border-color:#7c3aed;color:#5b21b6;">{btn_supermarkt}</button>
-</div>
-<div id="map"></div>
-<script>
-// Map starts zoomed out on Switzerland; client-side geocoding centres it correctly
-var map = L.map('map').setView([46.9481, 7.4474], 8);
-L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{attribution:'&copy; OpenStreetMap'}}).addTo(map);
-
-var hi = L.divIcon({{html:'<div style="background:#2563eb;width:16px;height:16px;border-radius:50%;border:3px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.5)"></div>',iconSize:[16,16],iconAnchor:[8,8],className:''}});
-var AM = [];
-
-function fm(t,b){{document.querySelectorAll('.fb').forEach(x=>x.classList.remove('active'));b.classList.add('active');AM.forEach(function(m){{if(t==='all'||m.k===t)map.addLayer(m.m);else map.removeLayer(m.m);}});}}
-function mi(c){{return L.divIcon({{html:'<div style="background:'+c+';width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div>',iconSize:[14,14],iconAnchor:[7,7],className:''}});}}
-
-function addEl(el){{
-  if(!el.lat||!el.lon) return;
-  var t=el.tags||{{}},n=t.name||'Collection point';
-  var s=t['addr:street']||'',nr=t['addr:housenumber']||'';
-  var oa=s?(s+' '+nr).trim():'';
-  var h=t['opening_hours']||'{lbl_no_hours}';
-  var c='#6baed6',cat='Recycling',k='other';
-  if(t['recycling:glass_bottles']==='yes'||t['recycling:glass']==='yes'){{c='#31a354';cat='{cat_glass}';k='glass';}}
-  else if(t['recycling:plastic_bottles']==='yes'||t['recycling:PET']==='yes'){{c='#fd8d3c';cat='{cat_pet}';k='pet';}}
-  else if(t['recycling:scrap_metal']==='yes'||t['recycling:metal']==='yes'){{c='#636363';cat='{cat_metal}';k='metal';}}
-  else if(t.amenity==='waste_disposal'||t.recycling_type==='centre'){{c='#de2d26';cat='{cat_centre}';k='centre';}}
-  else if(t.shop==='supermarket'){{c='#7c3aed';cat='{btn_supermarkt}';k='store';}}
-  function addM(a){{
-    var gmaps='https://www.google.com/maps?q='+el.lat+','+el.lon;
-    var p='<b>'+n+'</b><br><span style="color:#64748b;font-size:12px">'+cat+'</span>';
-    if(a)p+='<br><small>&#128205; {lbl_address}: '+a+'</small>';
-    p+='<br><small>&#128336; {lbl_hours}: '+h+'</small>';
-    p+='<br><small><a href="'+gmaps+'" target="_blank" style="color:#2563eb;">{lbl_gmaps}</a></small>';
-    var mk=L.marker([el.lat,el.lon],{{icon:mi(c)}}).bindPopup(p).bindTooltip(cat+': '+n).addTo(map);
-    AM.push({{m:mk,k:k}});
-  }}
-  if(oa){{addM(oa);}}
-  else{{
-    fetch('https://nominatim.openstreetmap.org/reverse?lat='+el.lat+'&lon='+el.lon+'&format=json&zoom=18&addressdetails=1')
-      .then(function(r){{return r.json();}})
-      .then(function(g){{
-        var ad=g.address||{{}};
-        var road=ad.road||ad.pedestrian||ad.path||'';
-        var nr2=ad.house_number||'';
-        var v=ad.village||ad.town||ad.city||'';
-        addM(road?(road+(nr2?' '+nr2:''))+(v?', '+v:''):g.display_name.split(',').slice(0,2).join(',')||'');
-      }}).catch(function(){{addM('');}});
-  }}
-}}
-
-// fetchOSM: takes JS lat/lon variables so no Python f-string baking needed
-function fetchOSM(clat, clon){{
-  fetch('https://overpass-api.de/api/interpreter',{{method:'POST',
-    body:'data='+encodeURIComponent('[out:json][timeout:15];(node["amenity"="recycling"](around:3000,'+clat+','+clon+');node["amenity"="waste_disposal"](around:3000,'+clat+','+clon+'););out body;'),
-    headers:{{'Content-Type':'application/x-www-form-urlencoded'}}}})
-  .then(function(r){{return r.json();}})
-  .then(function(d){{(d.elements||[]).forEach(addEl);}})
-  .catch(function(e){{console.log('q1:',e);}});
-  fetch('https://overpass-api.de/api/interpreter',{{method:'POST',
-    body:'data='+encodeURIComponent('[out:json][timeout:10];node["shop"="supermarket"](around:1500,'+clat+','+clon+');out body;'),
-    headers:{{'Content-Type':'application/x-www-form-urlencoded'}}}})
-  .then(function(r){{return r.json();}})
-  .then(function(d){{
-    (d.elements||[]).filter(function(el){{var n2=(el.tags&&el.tags.name)||'';return /coop|migros|denner|lidl|aldi/i.test(n2);}}).forEach(addEl);
-  }}).catch(function(e){{console.log('q2:',e);}});
-}}
-
-// Client-side geocoding: browser requests Nominatim directly (reliable, no server dependency)
-fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent('{query_str} Schweiz')+'&format=json&limit=1&countrycodes=ch')
-  .then(function(r){{return r.json();}})
-  .then(function(data){{
-    var clat = (data && data[0]) ? parseFloat(data[0].lat) : 46.9481;
-    var clon = (data && data[0]) ? parseFloat(data[0].lon) : 7.4474;
-    map.setView([clat, clon], 15);
-    L.marker([clat, clon],{{icon:hi}}).bindPopup('<b>{home_label}</b><br>{location_label}').addTo(map);
-    fetchOSM(clat, clon);
-  }})
-  .catch(function(){{
-    map.setView([46.9481, 7.4474], 15);
-    fetchOSM(46.9481, 7.4474);
-  }});
-</script>
-</body>
-</html>"""
+    # calculate bbox around the coordinates (approx 10km radius)
+    delta = 0.04
+    bbox = f"{lon-delta},{lat-delta},{lon+delta},{lat+delta}"
+    osm_embed = f"https://www.openstreetmap.org/export/embed.html?bbox={bbox}&layer=mapnik&marker={lat},{lon}"
 
     return html.Div([
         html.Div(texts["map_title"], style={"fontWeight": "600", "fontSize": "14px", "color": "#1e40af", "marginBottom": "8px"}),
-        html.Iframe(srcDoc=map_html, style={"width": "100%", "height": "340px", "border": "none", "borderRadius": "8px"}),
-    ], className="map-card", style={"width": "100%"})
-
-
+        html.Iframe(src=osm_embed, style={"width": "100%", "height": "250px", "border": "none", "borderRadius": "8px", "marginBottom": "8px"}),
+        html.A(texts["map_button"], href=map_url, target="_blank", className="map-btn"),
+    ], className="map-card")
 
 
 app.layout = html.Div([
@@ -537,9 +300,7 @@ app.layout = html.Div([
     dcc.Store(id="active-session-store", data=""),
     dcc.Store(id="sidebar-collapsed-store", data=False),
     dcc.Store(id="zip-store", data=""),
-    dcc.Store(id="city-store", data=""),
     dcc.Store(id="agent-history-store", data={}),
-    dcc.Store(id="pending-message-store", data=None),
 
     html.Div([
         html.Div([
@@ -560,12 +321,8 @@ app.layout = html.Div([
                 html.Div([
                     html.Label("ZIP code", id="zip-label", className="sidebar-section-label"),
                     dbc.Input(
-                        id="zip-input", placeholder="e.g. 8820", type="text", maxLength=4,
+                        id="zip-input", placeholder="e.g. 9403", type="text", maxLength=4,
                         style={"borderRadius": "8px", "fontSize": "14px", "border": "1px solid #d1d5db"},
-                    ),
-                    dbc.Input(
-                        id="city-input", placeholder="e.g. Wädenswil", type="text",
-                        style={"borderRadius": "8px", "fontSize": "14px", "border": "1px solid #d1d5db", "marginTop": "6px"},
                     ),
                 ], style={"marginBottom": "20px"}),
                 dbc.Button(
@@ -630,10 +387,6 @@ app.layout = html.Div([
 def save_zip(value):
     return value or ""
 
-@app.callback(Output("city-store", "data"), Input("city-input", "value"))
-def save_city(value):
-    return value or ""
-
 @app.callback(Output("language-store", "data"), Input("language-dropdown", "value"))
 def update_language(lang):
     return lang or "en"
@@ -641,15 +394,13 @@ def update_language(lang):
 @app.callback(
     [Output("language-label", "children"), Output("zip-label", "children"),
      Output("new-chat-label", "children"), Output("history-label", "children"),
-     Output("chat-input", "placeholder"), Output("upload-button-text", "children"),
-     Output("zip-input", "placeholder"), Output("city-input", "placeholder")],
+     Output("chat-input", "placeholder"), Output("upload-button-text", "children")],
     Input("language-store", "data"),
 )
 def update_labels(language):
     texts = get_texts(language)
     return (texts["language_label"], texts["zip_label"], texts["new_chat"],
-            texts["chat_history_label"], texts["chat_input"], f" {texts['upload_button']}",
-            texts["zip_placeholder"], texts["city_placeholder"])
+            texts["chat_history_label"], texts["chat_input"], f" {texts['upload_button']}")
 
 @app.callback(
     [Output("sidebar", "className"), Output("main-content", "className")],
@@ -703,9 +454,9 @@ def update_session_list(sessions, active_session, language):
 @app.callback(
     Output("chat-content", "children"),
     [Input("language-store", "data"), Input("sessions-store", "data"), Input("active-session-store", "data"),
-     Input("zip-store", "data"), Input("city-store", "data")],
+     Input("zip-store", "data")],
 )
-def render_chat(language, sessions, active_session, zip_code, city):
+def render_chat(language, sessions, active_session, zip_code):
     texts = get_texts(language)
     messages = (sessions or {}).get(active_session, []) if active_session else []
     if not messages:
@@ -724,18 +475,6 @@ def render_chat(language, sessions, active_session, zip_code, city):
                 html.Div(html.I(className="bi bi-person-circle", style={"fontSize": "20px", "color": "#4a7ba7"}),
                          style={**AVATAR, "backgroundColor": "#e8f0f7", "display": "flex", "alignItems": "center", "justifyContent": "center"}),
             ], style={**CHAT_ROW, "justifyContent": "flex-end"})
-
-        elif msg.get("role") == "thinking":
-            return html.Div([
-                html.Img(src="/assets/robo_head.png", style=AVATAR),
-                html.Div([
-                    html.Span("●", style={"animation": "pulse 1s infinite", "marginRight": "4px"}),
-                    html.Span("●", style={"animation": "pulse 1s infinite 0.2s", "marginRight": "4px"}),
-                    html.Span("●", style={"animation": "pulse 1s infinite 0.4s"}),
-                # borderRadius: TL TR BR BL → 4px unten-links = Spitze zeigt zum Avatar (links)
-                ], style={**CHAT_BUBBLE_BOT, "fontSize": "13px", "letterSpacing": "3px", "padding": "10px 16px", "borderRadius": "16px 16px 16px 4px"}),
-            ], style=CHAT_ROW)
-
         elif msg.get("role") == "image_result":
             image_src = msg.get("image_src", "")
             return html.Div([
@@ -745,45 +484,21 @@ def render_chat(language, sessions, active_session, zip_code, city):
                     html.Div(msg.get("result_data", {}).get("content", [])),
                 ], className="image-result-card")], style={**CHAT_BUBBLE_BOT, "backgroundColor": "transparent", "border": "none", "padding": "0"}),
             ], style=CHAT_ROW)
-
-        # ---------------------------------------------------------------
-        # Change 4: location_result — show ONLY the map card.
-        #
-        # Previously: text bubble (with Google Maps links) + map card
-        #             → same links appeared twice (duplicate).
-        #
-        # Now: just the map card whose popups already contain
-        #      address, opening hours AND the Google Maps link.
-        #      The agent text is kept in the store but not rendered.
-        #
-        # Fallback: if no zip/city was stored, render the text response
-        #           as a plain assistant bubble so nothing is lost.
-        # ---------------------------------------------------------------
         elif msg.get("role") == "location_result":
-            zip_used  = msg.get("zip_code", zip_code)
-            city_used = msg.get("city", city)
+            # special location message with map card
+            zip_used = msg.get("zip_code", zip_code)
             lang_used = msg.get("language", language)
-            if zip_used or city_used:
-                return html.Div([
-                    html.Img(src="/assets/robo_head.png", style=AVATAR),
-                    html.Div(
-                        make_map_card(zip_used, lang_used, city=city_used),
-                        style={"flex": "1", "minWidth": "0"},
-                    ),
-                ], style=CHAT_ROW)
-            # No location available → plain text fallback
             return html.Div([
                 html.Img(src="/assets/robo_head.png", style=AVATAR),
-                html.Div(
-                    dcc.Markdown(msg.get("content", ""), className="markdown-content", style={"margin": 0}),
-                    style={**CHAT_BUBBLE_BOT, "maxWidth": "fit-content"},
-                ),
+                html.Div([
+                    html.Div(dcc.Markdown(msg.get("content", ""), className="markdown-content", style={"margin": 0}), style=CHAT_BUBBLE_BOT),
+                    make_map_card(zip_used, lang_used) if zip_used else None,
+                ]),
             ], style=CHAT_ROW)
-
         else:
             return html.Div([
                 html.Img(src="/assets/robo_head.png", style=AVATAR),
-                html.Div(dcc.Markdown(msg.get("content", ""), className="markdown-content", style={"margin": 0}), style={**CHAT_BUBBLE_BOT, "maxWidth": "fit-content"}),
+                html.Div(dcc.Markdown(msg.get("content", ""), className="markdown-content", style={"margin": 0}), style=CHAT_BUBBLE_BOT),
             ], style=CHAT_ROW)
 
     return html.Div([make_msg(m) for m in messages], style={"padding": "28px 0", "maxWidth": "920px", "margin": "0 auto"})
@@ -827,24 +542,17 @@ def delete_session(n_clicks, sessions, active_session):
     new_active = active_session if active_session != sid else (list(sessions.keys())[0] if sessions else "")
     return sessions, new_active
 
-
-# ---------------------------------------------------------------------------
-# Two-step send — Step 1: show user message + thinking bubble
-# ---------------------------------------------------------------------------
 @app.callback(
     [Output("sessions-store", "data", allow_duplicate=True),
      Output("active-session-store", "data", allow_duplicate=True),
-     Output("pending-message-store", "data"),
-     Output("chat-input", "value")],
+     Output("agent-history-store", "data", allow_duplicate=True)],
     [Input("send-button", "n_clicks"), Input("chat-input", "n_submit")],
     [State("chat-input", "value"), State("sessions-store", "data"),
      State("active-session-store", "data"), State("language-store", "data"),
-     State("zip-store", "data"), State("city-store", "data"),
-     State("agent-history-store", "data")],
+     State("zip-store", "data"), State("agent-history-store", "data")],
     prevent_initial_call=True,
 )
-def send_message_step1(n_clicks, n_submit, user_text, sessions, active_session, language, zip_code, city, agent_history):
-    """Step 1: Immediately display user message + thinking bubble, store pending state."""
+def send_message(n_clicks, n_submit, user_text, sessions, active_session, language, zip_code, agent_history):
     if (not n_clicks and not n_submit) or not user_text or not user_text.strip():
         raise dash.exceptions.PreventUpdate
 
@@ -856,46 +564,7 @@ def send_message_step1(n_clicks, n_submit, user_text, sessions, active_session, 
         sessions[active_session] = []
 
     user_text = user_text.strip()
-
     sessions[active_session].append({"role": "user", "content": user_text})
-    sessions[active_session].append({"role": "thinking"})
-
-    pending = {
-        "user_text": user_text,
-        "session_id": active_session,
-        "language": language,
-        "zip_code": zip_code,
-        "city": city,
-        "agent_history": agent_history,
-    }
-
-    return sessions, active_session, pending, ""
-
-
-# Two-step send — Step 2: call agent, replace thinking bubble
-@app.callback(
-    [Output("sessions-store", "data", allow_duplicate=True),
-     Output("agent-history-store", "data", allow_duplicate=True)],
-    Input("pending-message-store", "data"),
-    State("sessions-store", "data"),
-    prevent_initial_call=True,
-)
-def send_message_step2(pending, sessions):
-    """Step 2: Call agent and replace thinking bubble with real response."""
-    if not pending or not isinstance(pending, dict):
-        raise dash.exceptions.PreventUpdate
-
-    sessions = sessions or {}
-    user_text = pending.get("user_text", "")
-    active_session = pending.get("session_id", "")
-    language = pending.get("language", "en")
-    zip_code = pending.get("zip_code", "")
-    city = pending.get("city", "")
-    agent_history = pending.get("agent_history", {})
-
-    if not active_session or active_session not in sessions:
-        raise dash.exceptions.PreventUpdate
-
     session_state = agent_history.get(active_session, {"scan_history": [], "conv_history": []})
 
     try:
@@ -903,7 +572,6 @@ def send_message_step2(pending, sessions):
             user_message=user_text, image_path=None, zip_code=zip_code or None,
             language=language or "en", classification=None, guidelines=None, collection_points=None,
             input_type=None, needs_clarification=False, final_response=None,
-            osm_elements=None, map_lat=None, map_lon=None,
             scan_history=session_state["scan_history"], conversation_history=session_state["conv_history"],
         )
         result = agent.invoke(state, config={"configurable": {"thread_id": active_session}})
@@ -919,26 +587,23 @@ def send_message_step2(pending, sessions):
         response = f"Error: {e}"
         input_type = "text"
 
-    msgs = sessions[active_session]
-    if msgs and msgs[-1].get("role") == "thinking":
-        msgs.pop()
-
-    if input_type == "location" and (zip_code or city):
-        # Store content for potential fallback, but the bubble won't show it
-        # (the map popup already contains address + hours + Google Maps link).
-        msgs.append({
+    # use location_result role when it was a location query with a ZIP code
+    # this triggers the map card in the chat
+    if input_type == "location" and zip_code:
+        sessions[active_session].append({
             "role": "location_result",
             "content": response,
             "zip_code": zip_code,
-            "city": city,
-            "language": language or "en",
+            "language": language or "en"
         })
     else:
-        msgs.append({"role": "assistant", "content": response})
+        sessions[active_session].append({"role": "assistant", "content": response})
 
-    sessions[active_session] = msgs
-    return sessions, agent_history
+    return sessions, active_session, agent_history
 
+@app.callback(Output("chat-input", "value"), [Input("send-button", "n_clicks"), Input("chat-input", "n_submit")], prevent_initial_call=True)
+def clear_input(n_clicks, n_submit):
+    return ""
 
 @app.callback(
     [Output("sessions-store", "data", allow_duplicate=True),
@@ -946,11 +611,10 @@ def send_message_step2(pending, sessions):
      Output("agent-history-store", "data", allow_duplicate=True)],
     [Input("image-upload", "contents"), State("image-upload", "filename"),
      State("language-store", "data"), State("sessions-store", "data"),
-     State("active-session-store", "data"), State("zip-store", "data"),
-     State("city-store", "data"), State("agent-history-store", "data")],
+     State("active-session-store", "data"), State("zip-store", "data"), State("agent-history-store", "data")],
     prevent_initial_call=True,
 )
-def handle_image(contents, filename, language, sessions, active_session, zip_code, city, agent_history):
+def handle_image(contents, filename, language, sessions, active_session, zip_code, agent_history):
     if not contents:
         raise dash.exceptions.PreventUpdate
 
@@ -976,7 +640,6 @@ def handle_image(contents, filename, language, sessions, active_session, zip_cod
             image_path=tmp_path, zip_code=zip_code or None, language=language or "en",
             classification=None, guidelines=None, collection_points=None,
             input_type=None, needs_clarification=False, final_response=None,
-            osm_elements=None, map_lat=None, map_lon=None,
             scan_history=session_state["scan_history"], conversation_history=session_state["conv_history"],
         )
         result = agent.invoke(state, config={"configurable": {"thread_id": active_session}})
