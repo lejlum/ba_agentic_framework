@@ -563,9 +563,10 @@ app.layout = html.Div([
                         id="zip-input", placeholder="e.g. 8820", type="text", maxLength=4,
                         style={"borderRadius": "8px", "fontSize": "14px", "border": "1px solid #d1d5db"},
                     ),
+                    html.Label("City", id="city-label", className="sidebar-section-label", style={"marginTop": "10px"}),
                     dbc.Input(
                         id="city-input", placeholder="e.g. Wädenswil", type="text",
-                        style={"borderRadius": "8px", "fontSize": "14px", "border": "1px solid #d1d5db", "marginTop": "6px"},
+                        style={"borderRadius": "8px", "fontSize": "14px", "border": "1px solid #d1d5db"},
                     ),
                 ], style={"marginBottom": "20px"}),
                 dbc.Button(
@@ -640,6 +641,7 @@ def update_language(lang):
 
 @app.callback(
     [Output("language-label", "children"), Output("zip-label", "children"),
+     Output("city-label", "children"),
      Output("new-chat-label", "children"), Output("history-label", "children"),
      Output("chat-input", "placeholder"), Output("upload-button-text", "children"),
      Output("zip-input", "placeholder"), Output("city-input", "placeholder")],
@@ -647,9 +649,9 @@ def update_language(lang):
 )
 def update_labels(language):
     texts = get_texts(language)
-    return (texts["language_label"], texts["zip_label"], texts["new_chat"],
-            texts["chat_history_label"], texts["chat_input"], f" {texts['upload_button']}",
-            texts["zip_placeholder"], texts["city_placeholder"])
+    return (texts["language_label"], texts["zip_label"], texts["city_label"],
+            texts["new_chat"], texts["chat_history_label"], texts["chat_input"],
+            f" {texts['upload_button']}", texts["zip_placeholder"], texts["city_placeholder"])
 
 @app.callback(
     [Output("sidebar", "className"), Output("main-content", "className")],
