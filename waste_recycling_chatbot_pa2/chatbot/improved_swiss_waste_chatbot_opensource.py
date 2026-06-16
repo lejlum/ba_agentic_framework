@@ -180,9 +180,9 @@ RECYCLING_GUIDE = {
 
 class ConfidenceLevel:
     """Confidence thresholds for classification"""
-    HIGH = 0.85
-    MEDIUM = 0.60
-    LOW = 0.40
+    HIGH = 0.70
+    MEDIUM = 0.35
+    LOW = 0.20
 
 # ============================================================================
 # IMAGE CLASSIFIER
@@ -198,9 +198,13 @@ class WasteClassifier:
         
         # Standard ImageNet normalization for transfer learning compatibility
         self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
+            transforms.Resize((256, 256)),
+            transforms.CenterCrop(224),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            )
         ])
         
         self.model = self._create_model(model_path)
@@ -274,6 +278,8 @@ class WasteClassifier:
                 for i in range(3)
             ]
             
+            logger.info(f"Top 3 predictions: {top3_predictions}")
+
             # Map confidence score to qualitative level for UI display
             # Thresholds are calibrated to match model's typical prediction patterns
             if confidence_score >= ConfidenceLevel.HIGH:
