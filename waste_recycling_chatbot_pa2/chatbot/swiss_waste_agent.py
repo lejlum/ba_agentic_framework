@@ -50,49 +50,102 @@ TEXT_CATEGORY_MAP = {
     # English
     "tetrapack": "composite_carton", "tetra pak": "composite_carton",
     "juice box": "composite_carton", "milk carton": "composite_carton",
+    "juice carton": "composite_carton", "milk box": "composite_carton",
+    "tetra brik": "composite_carton",
+
     "cardboard": "cardboard", "carton": "cardboard",
     "paper": "paper", "newspaper": "paper", "magazine": "paper",
-    "plastic bottle": "pet_bottles", "pet bottle": "pet_bottles", "pet": "pet_bottles",
+
+    "plastic bottle": "pet", "pet bottle": "pet", "pet": "pet",
+
     "glass bottle": "white_glass", "wine bottle": "white_glass",
+    "clear glass": "white_glass", "white glass": "white_glass",
     "beer bottle": "brown_glass",
+    "brown glass": "brown_glass",
+    "green bottle": "green_glass", "green glass": "green_glass",
+
     "aluminium": "aluminium", "aluminum": "aluminium",
     "tin can": "aluminium", "can": "aluminium",
-    "battery": "batteries", "batteries": "batteries",
-    "phone": "electronic_waste", "mobile": "electronic_waste",
-    "laptop": "electronic_waste", "electronics": "electronic_waste",
-    "clothes": "textiles", "clothing": "textiles",
-    "fabric": "textiles", "shoes": "textiles",
-    "food waste": "organic_waste", "compost": "organic_waste",
     "nespresso": "aluminium", "coffee capsule": "aluminium", "capsule": "aluminium",
     "foil": "aluminium", "yogurt lid": "aluminium", "tin foil": "aluminium",
     "spray can": "aluminium", "beverage can": "aluminium",
-    "juice carton": "composite_carton", "milk box": "composite_carton",
-    "tetra brik": "composite_carton",
+
+    "battery": "hazardous_waste_(battery)",
+    "batteries": "hazardous_waste_(battery)",
+
+    # Items that are outside the trained recycling categories
+    # are mapped to non_waste so the assistant does not invent disposal rules.
+    "phone": "non_waste", "mobile": "non_waste",
+    "laptop": "non_waste", "electronics": "non_waste",
+    "clothes": "non_waste", "clothing": "non_waste",
+    "fabric": "non_waste", "shoes": "non_waste",
+
+    "food waste": "organic_waste", "compost": "organic_waste",
+    "food scraps": "organic_waste", "vegetable scraps": "organic_waste",
+    "fruit scraps": "organic_waste", "garden waste": "organic_waste",
+
     "shampoo bottle": "rigid_plastic_container",
     "detergent bottle": "rigid_plastic_container",
     "cleaning bottle": "rigid_plastic_container",
-    "food scraps": "organic_waste", "vegetable scraps": "organic_waste",
-    "fruit scraps": "organic_waste", "garden waste": "organic_waste",
+
+    "plastic": "plastic",
+    "plastic bag": "plastic",
+    "wrapper": "plastic",
+
+    "residual waste": "residual_waste",
     "receipt": "residual_waste", "thermal paper": "residual_waste",
     "diaper": "residual_waste", "nappy": "residual_waste",
+
     # German
     "altpapier": "paper", "zeitung": "paper", "zeitschrift": "paper",
     "karton": "cardboard", "pappe": "cardboard",
-    "plastikflasche": "pet_bottles",
-    "glasflasche": "white_glass", "weissglas": "white_glass",
-    "braunglas": "brown_glass", "grünglas": "green_glass",
+
+    "plastikflasche": "pet",
+    "pet flasche": "pet",
+    "pet-flasche": "pet",
+
+    "glasflasche": "white_glass",
+    "weissglas": "white_glass",
+    "weißglas": "white_glass",
+    "braunglas": "brown_glass",
+    "grünglas": "green_glass",
+
     "alu": "aluminium", "aludose": "aluminium", "dose": "aluminium",
-    "batterie": "batteries",
-    "handy": "electronic_waste", "elektroschrott": "electronic_waste",
-    "kleider": "textiles", "textilien": "textiles",
-    "kompost": "organic_waste", "speisereste": "organic_waste",
     "nespressokapsel": "aluminium", "kaffekapsel": "aluminium",
     "alufolie": "aluminium", "joghurtdeckel": "aluminium",
     "sprühdose": "aluminium", "getränkedose": "aluminium",
-    "milchkarton": "composite_carton",
-    "shampooflaschen": "rigid_plastic_container",
+
+    "batterie": "hazardous_waste_(battery)",
+    "batterien": "hazardous_waste_(battery)",
+
+    # Not part of the trained waste classes
+    "handy": "non_waste",
+    "smartphone": "non_waste",
+    "elektroschrott": "non_waste",
+    "kleider": "non_waste",
+    "textilien": "non_waste",
+    "schuhe": "non_waste",
+
+    "kompost": "organic_waste", "speisereste": "organic_waste",
     "lebensmittelreste": "organic_waste", "gartenabfall": "organic_waste",
-    "kassenzettel": "residual_waste", "windel": "residual_waste",
+
+    "milchkarton": "composite_carton",
+    "getränkekarton": "composite_carton",
+    "tetrapack": "composite_carton",
+
+    "shampooflasche": "rigid_plastic_container",
+    "shampooflaschen": "rigid_plastic_container",
+    "reinigungsflasche": "rigid_plastic_container",
+
+    "plastik": "plastic",
+    "plastiksack": "plastic",
+    "plastiktüte": "plastic",
+    "verpackungsfolie": "plastic",
+
+    "kehricht": "residual_waste",
+    "restmüll": "residual_waste",
+    "kassenzettel": "residual_waste",
+    "windel": "residual_waste",
 }
 
 LOCATION_KEYWORDS = [

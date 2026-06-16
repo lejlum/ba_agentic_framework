@@ -4,25 +4,28 @@ Central configuration for all project paths
 from pathlib import Path
 
 # ============================================================================
-# PROJECT ROOT
+# PROJECT ROOTS
 # ============================================================================
 # Old Project Root
 #PROJECT_ROOT = Path(r"C:\ZHAW\HS25\PA2\waste_recycling_chatbot_pa2")
 
-# New Project Root
-PROJECT_ROOT = Path(r"C:\Users\Lejlum\Documents\PA2_Recycling_Chatbot\waste_recycling_chatbot_pa2")
+# Code/notebooks root - this workspace (ba_agentic_framework)
+PROJECT_ROOT = Path(r"C:\Users\Lejlum\Documents\agentic_framework\ba_agentic_framework\waste_recycling_chatbot_pa2")
+
+# Data/models root - large files stay here, not duplicated into this workspace
+DATA_PROJECT_ROOT = Path(r"C:\Users\Lejlum\Documents\PA2_Recycling_Chatbot\waste_recycling_chatbot_pa2")
 
 # ============================================================================
 # ALL OTHER PATHS
 # ============================================================================
 
 # Archive (Backup of original files)
-ARCHIVE_ROOT = PROJECT_ROOT.parent / "_archive_original"  # Eine Ebene höher
+ARCHIVE_ROOT = DATA_PROJECT_ROOT.parent / "_archive_original"  # Eine Ebene höher
 REALWASTE_ORIGINAL = ARCHIVE_ROOT / "realwaste-main" / "RealWaste"
 ECOVISION_ORIGINAL = ARCHIVE_ROOT / "ecovision_mobilenetv3"
 
 # Data
-DATA_ROOT = PROJECT_ROOT.parent / "data"
+DATA_ROOT = DATA_PROJECT_ROOT.parent / "data"
 RAW_DATA = DATA_ROOT / "raw"
 PROCESSED_DATA = DATA_ROOT / "processed" / "organized_dataset"
 
@@ -30,23 +33,28 @@ PROCESSED_DATA = DATA_ROOT / "processed" / "organized_dataset"
 WASTE_CHATBOT_DATASET = DATA_ROOT / "waste_chatbot_dataset"
 WASTE_CHATBOT_EXCEL = DATA_ROOT / "waste_chatbot_excel.xlsx"
 
+# COCO Dataset (for non_waste class)
+COCO_DATA = DATA_ROOT / "coco_data"
+COCO_IMAGES_TRAIN = COCO_DATA / "images" / "train2017"
+COCO_IMAGES_VAL = COCO_DATA / "images" / "val2017"
+
 # Output für neu organisiertes Dataset
 PROCESSED_NEW = DATA_ROOT / "processed_new" / "organized_dataset"
 
 # Models
-MODEL_ROOT = PROJECT_ROOT / "models"
-BASELINE_MODEL = PROJECT_ROOT / "_archive_original" / "ecovision_mobilenetv3" / "pytorch_model.bin"  # Original (READ-ONLY)
+MODEL_ROOT = DATA_PROJECT_ROOT / "models"
+BASELINE_MODEL = DATA_PROJECT_ROOT / "_archive_original" / "ecovision_mobilenetv3" / "pytorch_model.bin"  # Original (READ-ONLY)
 FINETUNED_MODEL = MODEL_ROOT / "baseline" / "finetuned_model.pth"  # Ihr trainiertes Model
 CHECKPOINT_DIR = MODEL_ROOT / "checkpoints"
 FINAL_MODEL_DIR = MODEL_ROOT / "baseline"
 
 # Outputs
-OUTPUT_ROOT = PROJECT_ROOT / "outputs"
+OUTPUT_ROOT = DATA_PROJECT_ROOT / "outputs"
 FIGURES_DIR = OUTPUT_ROOT / "figures"
 LOGS_DIR = OUTPUT_ROOT / "logs"
 REPORTS_DIR = OUTPUT_ROOT / "reports"
 
-# Notebooks
+# Notebooks (code lives in this workspace)
 NOTEBOOKS_DIR = PROJECT_ROOT / "notebooks"
 
 # ============================================================================
@@ -104,7 +112,7 @@ def create_directories():
     print("Creating directories...")
     for dir_path in dirs_to_create:
         dir_path.mkdir(parents=True, exist_ok=True)
-        print(f"Created: {dir_path.relative_to(PROJECT_ROOT)}")
+        print(f"Created: {dir_path}")
     
     print("\nAll directories created successfully!")
 

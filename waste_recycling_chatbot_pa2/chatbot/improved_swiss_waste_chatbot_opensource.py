@@ -8,7 +8,7 @@ NEVER suggests disposal methods that don't exist in Swiss practice.
 Authoritative Source: https://swissrecycle.ch/de/wertstoffe-wissen/recycling-in-der-schweiz
 
 Features:
-- Image classification for 16 waste categories
+- Image classification for 17 waste categories
 - Ollama integration for conversational AI
 - Strict Swiss Recycle-aligned disposal guidance
 - Category-controlled disposal channel logic (no generic curbside mentions)
@@ -39,12 +39,25 @@ class Config:
     OLLAMA_URL = "http://localhost:11434" 
     DEFAULT_MODEL = "qwen2.5-coder:7b-instruct"
     
-    # Complete waste categories (16 categories from dataset)
+    # Complete waste categories (17 categories from dataset)
     WASTE_CATEGORIES = [
-        'aluminium', 'brown_glass', 'cardboard', 'composite_carton',
-        'green_glass', 'hazardous_waste_(battery)', 'metal', 'organic_waste',
-        'paper', 'pet', 'plastic', 'plastic_aluminium',
-        'residual_waste', 'rigid_plastic_container', 'white_glass', 'white_glass_metal'
+        'aluminium',
+        'brown_glass',
+        'cardboard',
+        'composite_carton',
+        'green_glass',
+        'hazardous_waste_(battery)',
+        'metal',
+        'non_waste',
+        'organic_waste',
+        'paper',
+        'pet',
+        'plastic',
+        'plastic_aluminium',
+        'residual_waste',
+        'rigid_plastic_container',
+        'white_glass',
+        'white_glass_metal'
     ]
 
 # ============================================================================
@@ -147,6 +160,12 @@ RECYCLING_GUIDE = {
         "en": "Batteries must be returned to any retail store that sells batteries—this service is provided free of charge and is legally required for all retailers. All battery types are accepted. Other hazardous waste (chemicals, paint, solvents, electronic devices): bring to recycling centers or special municipal collection days. Small electronic devices are often accepted at retail stores.",
         "de": "Batterien müssen in jedem Verkaufsgeschäft zurückgegeben werden, das Batterien verkauft—dieser Service ist kostenlos und für alle Händler gesetzlich vorgeschrieben. Alle Batterietypen werden angenommen. Anderer Sonderabfall (Chemikalien, Farben, Lösungsmittel, elektronische Geräte): zu Recyclingzentren oder speziellen kommunalen Sammeltagen bringen. Kleinelektronikgeräte werden oft in Verkaufsgeschäften angenommen."
     },
+        "non_waste": {
+        "allow_curbside": False,
+        "primary_channels": ["not_applicable"],
+        "en": "The image does not appear to show a waste item. Please upload a clear photo of the item you want to dispose of, ideally with the object centered and visible.",
+        "de": "Das Bild scheint keinen Abfallgegenstand zu zeigen. Bitte lade ein klares Foto des Gegenstands hoch, den du entsorgen möchtest, idealerweise zentriert und gut sichtbar."
+    },
     "residual_waste": {
         "allow_curbside": True,
         "primary_channels": ["curbside_paid"],
@@ -169,7 +188,7 @@ class ConfidenceLevel:
 # IMAGE CLASSIFIER
 # ============================================================================
 
-# MobileNetV3-based image classifier for 16 waste categories
+# MobileNetV3-based image classifier for 17 waste categories
 class WasteClassifier:
     """Waste image classifier using MobileNetV3"""
     
@@ -191,7 +210,7 @@ class WasteClassifier:
         """Create and load the classification model"""
         model = models.mobilenet_v3_large(weights=None)
         
-        # Replace default classifier with custom 16-category head
+        # Replace default classifier with custom 17-category head
         # Using intermediate 1280-dim layer to avoid overfitting on smaller datasets
         model.classifier = nn.Sequential(
             nn.Linear(960, 1280),
