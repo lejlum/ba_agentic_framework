@@ -214,13 +214,16 @@ class WasteClassifier:
         """Create and load the classification model"""
         model = models.mobilenet_v3_large(weights=None)
         
-        # Replace default classifier with custom 17-category head
-        # Using intermediate 1280-dim layer to avoid overfitting on smaller datasets
+        # Architecture must match finetuned_model.pth exactly — any difference
+        # causes load_state_dict to raise RuntimeError and fall back to random weights.
         model.classifier = nn.Sequential(
             nn.Linear(960, 1280),
             nn.Hardswish(),
-            nn.Dropout(0.2),
-            nn.Linear(1280, len(self.categories))
+            nn.Dropout(0.5),
+            nn.Linear(1280, 512),
+            nn.Hardswish(),
+            nn.Dropout(0.3),
+            nn.Linear(512, len(self.categories))
         )
         
         if model_path and Path(model_path).exists():
