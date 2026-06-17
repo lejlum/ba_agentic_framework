@@ -455,7 +455,7 @@ Rules:
 
     context = ""
     if classification:
-        context += f"Detected category: {classification['category'].replace('_', ' ').title()} ({classification['confidence']:.1%})\n\n"
+        context += f"Detected category: {classification['category'].replace('_', ' ').title()}\n\n"
     if guidelines:
         context += f"Swiss Recycle guideline:\n{guidelines}\n\n"
     if collection_points:
@@ -628,7 +628,7 @@ def main():
         if scan_history:
             print(f"\n── Scan history ({len(scan_history)} item(s)) ──")
             for i, s in enumerate(scan_history, 1):
-                print(f"  {i}. {s['category'].replace('_', ' ').title()} – {s['confidence']:.0%} confidence")
+                print(f"  {i}. {s['category'].replace('_', ' ').title()}")
 
 
 if __name__ == "__main__":

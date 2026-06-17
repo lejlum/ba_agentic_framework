@@ -54,7 +54,6 @@ def get_texts(language: str) -> Dict[str, str]:
             "city_label": "Ort",
             "zip_placeholder": "z.B. 8820",
             "city_placeholder": "z.B. Wädenswil",
-            "confidence": "Konfidenz",
             "welcome_title": "Hi, ich bin dein Swiss Recycling Assistant",
             "welcome_text": "Du bist unsicher, wie du etwas in der Schweiz recyceln sollst? Lade ein Foto deines Abfalls hoch oder stelle mir einfach direkt deine Frage.",
             "no_chats": "Keine Chatverläufe",
@@ -74,7 +73,6 @@ def get_texts(language: str) -> Dict[str, str]:
         "city_label": "City",
         "zip_placeholder": "e.g. 8820",
         "city_placeholder": "e.g. Wädenswil",
-        "confidence": "Confidence",
         "welcome_title": "Hi, I'm your Swiss Recycling Assistant",
         "welcome_text": "Not sure how to recycle something in Switzerland? Upload a picture of your waste item or just ask me directly.",
         "no_chats": "No chat history",
@@ -984,11 +982,9 @@ def handle_image(contents, filename, language, sessions, active_session, zip_cod
         result = agent.invoke(state, config={"configurable": {"thread_id": active_session}})
         classification = result.get("classification") or {}
         category = classification.get("category", "unknown").replace("_", " ").title()
-        confidence = classification.get("confidence", 0)
 
         result_content = [
             html.H5(f"{texts['detected']}: {category}", style={"fontWeight": "600", "marginBottom": "8px", "fontSize": "17px", "color": "#1a202c"}),
-            html.P(f"{texts['confidence']}: {confidence:.0%}", style={"color": "#10b981", "fontSize": "14px", "marginBottom": "14px", "fontWeight": "500"}),
             dcc.Markdown(result["final_response"], className="markdown-content", style={"marginBottom": 0}),
         ]
         agent_history[active_session] = {
