@@ -528,8 +528,6 @@ Your goal: Precise, category-specific disposal advice according to Swiss Recycle
         
         if classification and classification.get("category") != "unknown":
             category = classification["category"]
-            confidence = classification["confidence"]
-            confidence_level = classification.get("confidence_level", "medium")
             guidelines = classification.get("guidelines", {})
             
             self._current_category = category
@@ -538,9 +536,8 @@ Your goal: Precise, category-specific disposal advice according to Swiss Recycle
             # Without this, Ollama might hallucinate disposal methods not in Swiss practice
             if self.language == "de":
                 context = f"**Bildklassifikation**:\n"
-                context += f"- Erkannter Abfalltyp: **{category.replace('_', ' ')}**\n"
-                context += f"- Vertrauen: {confidence:.1%} ({confidence_level})\n\n"
-                
+                context += f"- Erkannter Abfalltyp: **{category.replace('_', ' ')}**\n\n"
+
                 context += f"**Swiss Recycle Richtlinie für diese Kategorie**:\n"
                 if guidelines.get("de"):
                     context += f"{guidelines['de']}\n"
@@ -557,9 +554,8 @@ Your goal: Precise, category-specific disposal advice according to Swiss Recycle
                 context += f"\n\n**Deine Aufgabe**: Erkläre die Entsorgung basierend NUR auf der obigen Richtlinie. Beginne direkt mit der Anweisung ohne Konfidenzangabe. Füge KEINE Links hinzu."
             else:
                 context = f"**Image Classification**:\n"
-                context += f"- Detected waste type: **{category.replace('_', ' ')}**\n"
-                context += f"- Confidence: {confidence:.1%} ({confidence_level})\n\n"
-                
+                context += f"- Detected waste type: **{category.replace('_', ' ')}**\n\n"
+
                 context += f"**Swiss Recycle Guideline for this category**:\n"
                 if guidelines.get("en"):
                     context += f"{guidelines['en']}\n"
@@ -785,7 +781,7 @@ Tip: Bot provides category-specific guidance per Swiss Recycle.""",
                             else:
                                 print(f"\nAlternative possibilities:")
                             for i, pred in enumerate(top3[1:3], 2):
-                                print(f"   {i}. {pred['category'].replace('_', ' ').title()} ({pred['confidence']:.1%})")
+                                print(f"   {i}. {pred['category'].replace('_', ' ').title()}")
                     
                     print(f"\n{result['advice']}")
                 
