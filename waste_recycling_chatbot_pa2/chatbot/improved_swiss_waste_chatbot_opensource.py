@@ -595,8 +595,9 @@ class SwissRecyclingBot:
         # Simplifies deployment while allowing custom model paths
         if model_path is None:
             possible_paths = [
+                r"C:\Users\Lejlum\Documents\PA2_Recycling_Chatbot\waste_recycling_chatbot_pa2\models\baseline\finetuned_model.pth",
                 "../models/baseline/finetuned_model.pth",
-                "./models/baseline/finetuned_model.pth", 
+                "./models/baseline/finetuned_model.pth",
                 "./finetuned_model.pth",
                 "../finetuned_model.pth"
             ]

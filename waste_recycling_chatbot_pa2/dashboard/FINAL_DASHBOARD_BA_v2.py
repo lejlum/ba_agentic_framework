@@ -357,6 +357,7 @@ app.index_string = '''
             }
             @media (max-width: 768px) {
                 #sidebar { width: 0px; overflow: hidden; border: none; }
+                #sidebar.collapsed { width: 0px; overflow: hidden; border: none; }
                 #sidebar.open { width: 260px; overflow: visible; border-right: 1px solid #e5e7eb; box-shadow: 4px 0 20px rgba(0,0,0,0.15); z-index: 1100; }
                 #main-content { margin-left: 0px !important; padding: 16px 16px 100px 16px; }
                 #main-content.collapsed { margin-left: 0px; }
@@ -538,6 +539,7 @@ app.layout = html.Div([
     dcc.Store(id="city-store", data=""),
     dcc.Store(id="agent-history-store", data={}),
     dcc.Store(id="pending-message-store", data=None),
+    dcc.Store(id="new-chat-session-id", data=None),
 
     html.Div([
         html.Div([
@@ -764,12 +766,25 @@ def render_chat(language, sessions, active_session, zip_code, city):
             city_used = msg.get("city", city)
             lang_used = msg.get("language", language)
             if zip_used or city_used:
+                loc = city_used or zip_used
+                if lang_used == "de":
+                    intro = (
+                        f"Hier sind Recycling-Standorte in der Nähe von **{loc}**. "
+                        f"Nutzen Sie die Filter auf der Karte, um Sammelstellen für "
+                        f"Aluminium, Glas, Karton, PET, Sonderabfall und mehr zu finden."
+                    )
+                else:
+                    intro = (
+                        f"Here are recycling locations near **{loc}**. "
+                        f"Use the filters on the map to find specific collection points "
+                        f"for aluminium, glass, cardboard, PET, hazardous waste, and more."
+                    )
                 return html.Div([
                     html.Img(src="/assets/robo_head.png", style=AVATAR),
-                    html.Div(
+                    html.Div([
+                        dcc.Markdown(intro, className="markdown-content", style={"marginBottom": "12px"}),
                         make_map_card(zip_used, lang_used, city=city_used),
-                        style={"flex": "1", "minWidth": "0"},
-                    ),
+                    ], style={"flex": "1", "minWidth": "0"}),
                 ], style=CHAT_ROW)
             # No location available → plain text fallback
             return html.Div([
@@ -789,7 +804,8 @@ def render_chat(language, sessions, active_session, zip_code, city):
     return html.Div([make_msg(m) for m in messages], style={"padding": "28px 0", "maxWidth": "920px", "margin": "0 auto"})
 
 @app.callback(
-    [Output("sessions-store", "data", allow_duplicate=True), Output("active-session-store", "data", allow_duplicate=True)],
+    [Output("sessions-store", "data", allow_duplicate=True), Output("active-session-store", "data", allow_duplicate=True),
+     Output("new-chat-session-id", "data")],
     Input("new-chat-btn", "n_clicks"), State("sessions-store", "data"),
     prevent_initial_call=True,
 )
@@ -799,7 +815,17 @@ def new_chat(n_clicks, sessions):
     sessions = sessions or {}
     new_id = str(uuid.uuid4())[:8]
     sessions[new_id] = []
-    return sessions, new_id
+    return sessions, new_id, new_id
+
+@app.callback(
+    [Output("zip-input", "value"), Output("city-input", "value")],
+    Input("new-chat-session-id", "data"),
+    prevent_initial_call=True,
+)
+def clear_inputs_on_new_chat(new_session_id):
+    if not new_session_id:
+        raise dash.exceptions.PreventUpdate
+    return "", ""
 
 @app.callback(
     Output("active-session-store", "data", allow_duplicate=True),
