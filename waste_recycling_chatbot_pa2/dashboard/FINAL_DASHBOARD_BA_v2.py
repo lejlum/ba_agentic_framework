@@ -23,6 +23,14 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except ImportError:
+    pass  # HEIC support unavailable; HEIC uploads will show a format error
+
+from PIL import Image, ImageOps
+
 import dash
 from dash import Dash, html, dcc, Input, Output, State, ctx, ALL
 from flask import request as flask_request, Response
@@ -539,6 +547,7 @@ app.layout = html.Div([
     dcc.Store(id="city-store", data=""),
     dcc.Store(id="agent-history-store", data={}),
     dcc.Store(id="pending-message-store", data=None),
+    dcc.Store(id="pending-image-store", data=None),
     dcc.Store(id="new-chat-session-id", data=None),
 
     html.Div([
@@ -969,17 +978,40 @@ def send_message_step2(pending, sessions):
 @app.callback(
     [Output("sessions-store", "data", allow_duplicate=True),
      Output("active-session-store", "data", allow_duplicate=True),
-     Output("agent-history-store", "data", allow_duplicate=True)],
+     Output("pending-image-store", "data")],
     [Input("image-upload", "contents"), State("image-upload", "filename"),
+     State("sessions-store", "data"), State("active-session-store", "data")],
+    prevent_initial_call=True,
+)
+def handle_image_step1(contents, filename, sessions, active_session):
+    """Step 1: Show thinking bubble immediately when image is uploaded."""
+    if not contents:
+        raise dash.exceptions.PreventUpdate
+    sessions = sessions or {}
+    if not active_session or active_session not in sessions:
+        active_session = str(uuid.uuid4())[:8]
+        sessions[active_session] = []
+    sessions[active_session].append({"role": "thinking"})
+    return sessions, active_session, {"contents": contents, "filename": filename}
+
+
+@app.callback(
+    [Output("sessions-store", "data", allow_duplicate=True),
+     Output("active-session-store", "data", allow_duplicate=True),
+     Output("agent-history-store", "data", allow_duplicate=True)],
+    [Input("pending-image-store", "data"),
      State("language-store", "data"), State("sessions-store", "data"),
      State("active-session-store", "data"), State("zip-store", "data"),
      State("city-store", "data"), State("agent-history-store", "data")],
     prevent_initial_call=True,
 )
-def handle_image(contents, filename, language, sessions, active_session, zip_code, city, agent_history):
-    if not contents:
+def handle_image_step2(pending, language, sessions, active_session, zip_code, city, agent_history):
+    """Step 2: Classify image, replace thinking bubble with result."""
+    if not pending or not isinstance(pending, dict):
         raise dash.exceptions.PreventUpdate
 
+    contents = pending["contents"]
+    filename = pending["filename"]
     sessions = sessions or {}
     agent_history = agent_history or {}
     texts = get_texts(language)
@@ -988,18 +1020,29 @@ def handle_image(contents, filename, language, sessions, active_session, zip_cod
         active_session = str(uuid.uuid4())[:8]
         sessions[active_session] = []
 
+    result_content = None
+    tmp_path = None
+    normalized_path = None
     try:
         header, encoded = contents.split(",", 1)
         img_bytes = base64.b64decode(encoded)
-        suffix = Path(filename).suffix or ".png"
+        suffix = Path(filename).suffix or ".jpg"
         tmp_path = os.path.join(tempfile.gettempdir(), f"upload_{uuid.uuid4().hex}{suffix}")
         with open(tmp_path, "wb") as f:
             f.write(img_bytes)
 
+        # Normalize: handle HEIC/WEBP/PNG/EXIF rotation → plain RGB JPEG
+        # pillow-heif (registered at import) lets PIL open HEIC transparently.
+        normalized_path = os.path.join(tempfile.gettempdir(), f"norm_{uuid.uuid4().hex}.jpg")
+        with Image.open(tmp_path) as img:
+            img = ImageOps.exif_transpose(img)  # fix phone rotation metadata
+            img = img.convert("RGB")             # HEIC/WEBP/PNG → JPEG-safe
+            img.save(normalized_path, "JPEG", quality=90)
+
         session_state = agent_history.get(active_session, {"scan_history": [], "conv_history": []})
         state = AgentState(
             user_message="How do I dispose of this?" if language == "en" else "Wie entsorge ich das?",
-            image_path=tmp_path, zip_code=zip_code or None, language=language or "en",
+            image_path=normalized_path, zip_code=zip_code or None, language=language or "en",
             classification=None, guidelines=None, collection_points=None,
             input_type=None, needs_clarification=False, final_response=None,
             osm_elements=None, map_lat=None, map_lon=None,
@@ -1017,16 +1060,25 @@ def handle_image(contents, filename, language, sessions, active_session, zip_cod
             "scan_history": result.get("scan_history", []),
             "conv_history": result.get("conversation_history", []),
         }
-        try:
-            os.remove(tmp_path)
-        except:
-            pass
 
     except Exception as e:
         logger.error(f"Image error: {e}")
-        result_content = [html.Div(f"Error: {e}", style={"color": "#dc2626", "fontWeight": "500"})]
+        result_content = [html.Div(f"Error processing image: {e}", style={"color": "#dc2626", "fontWeight": "500"})]
 
-    sessions[active_session].append({"role": "image_result", "image_src": contents, "result_data": {"content": result_content}})
+    finally:
+        for p in (tmp_path, normalized_path):
+            if p:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+
+    # Always remove the thinking bubble and append result, even after an error.
+    msgs = sessions.get(active_session, [])
+    if msgs and msgs[-1].get("role") == "thinking":
+        msgs.pop()
+    msgs.append({"role": "image_result", "image_src": contents, "result_data": {"content": result_content}})
+    sessions[active_session] = msgs
     return sessions, active_session, agent_history
 
 
