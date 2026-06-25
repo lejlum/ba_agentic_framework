@@ -716,8 +716,8 @@ def update_session_list(sessions, active_session, language):
 
 @app.callback(
     Output("chat-content", "children"),
-    [Input("language-store", "data"), Input("sessions-store", "data"), Input("active-session-store", "data"),
-     Input("city-store", "data")],
+    [Input("language-store", "data"), Input("sessions-store", "data"), Input("active-session-store", "data")],
+    [State("city-store", "data")],
 )
 def render_chat(language, sessions, active_session, city):
     texts = get_texts(language)
@@ -731,13 +731,16 @@ def render_chat(language, sessions, active_session, city):
             ], style={"backgroundColor": "#f9fafb", "borderRadius": "20px", "border": "1px solid #e5e7eb", "padding": "48px 32px", "maxWidth": "680px", "margin": "0 auto"}),
         ], style={"display": "flex", "alignItems": "center", "justifyContent": "center", "padding": "60px 24px", "minHeight": "65vh"})
 
-    def make_msg(msg):
+    # idx gives React a stable key per message so it reuses DOM nodes instead of
+    # recreating them — critical for keeping the map iframe from reloading.
+    def make_msg(msg, idx):
+        k = f"msg-{idx}"
         if msg.get("role") == "user":
             return html.Div([
                 html.Div(msg.get("content", ""), style=CHAT_BUBBLE_USER),
                 html.Div(html.I(className="bi bi-person-circle", style={"fontSize": "20px", "color": "#4a7ba7"}),
                          style={**AVATAR, "backgroundColor": "#e8f0f7", "display": "flex", "alignItems": "center", "justifyContent": "center"}),
-            ], style={**CHAT_ROW, "justifyContent": "flex-end"})
+            ], key=k, style={**CHAT_ROW, "justifyContent": "flex-end"})
 
         elif msg.get("role") == "thinking":
             return html.Div([
@@ -746,9 +749,8 @@ def render_chat(language, sessions, active_session, city):
                     html.Span("●", style={"animation": "pulse 1s infinite", "marginRight": "4px"}),
                     html.Span("●", style={"animation": "pulse 1s infinite 0.2s", "marginRight": "4px"}),
                     html.Span("●", style={"animation": "pulse 1s infinite 0.4s"}),
-                # borderRadius: TL TR BR BL → 4px unten-links = Spitze zeigt zum Avatar (links)
                 ], style={**CHAT_BUBBLE_BOT, "fontSize": "13px", "letterSpacing": "3px", "padding": "10px 16px", "borderRadius": "16px 16px 16px 4px"}),
-            ], style=CHAT_ROW)
+            ], key=k, style=CHAT_ROW)
 
         elif msg.get("role") == "image_result":
             image_src = msg.get("image_src", "")
@@ -758,27 +760,13 @@ def render_chat(language, sessions, active_session, city):
                     html.Img(src=image_src, style={"maxWidth": "100%", "maxHeight": "180px", "borderRadius": "8px", "marginBottom": "12px"}) if image_src else None,
                     html.Div(msg.get("result_data", {}).get("content", [])),
                 ], className="image-result-card")], style={**CHAT_BUBBLE_BOT, "backgroundColor": "transparent", "border": "none", "padding": "0"}),
-            ], style=CHAT_ROW)
+            ], key=k, style=CHAT_ROW)
 
-        # ---------------------------------------------------------------
-        # Change 4: location_result — show ONLY the map card.
-        #
-        # Previously: text bubble (with Google Maps links) + map card
-        #             → same links appeared twice (duplicate).
-        #
-        # Now: just the map card whose popups already contain
-        #      address, opening hours AND the Google Maps link.
-        #      The agent text is kept in the store but not rendered.
-        #
-        # Fallback: if no zip/city was stored, render the text response
-        #           as a plain assistant bubble so nothing is lost.
-        # ---------------------------------------------------------------
         elif msg.get("role") == "location_result":
             city_used = msg.get("city", city)
             lang_used = msg.get("language", language)
             lat_used  = msg.get("map_lat")
             lon_used  = msg.get("map_lon")
-            print(f"[MAP] render: msg map_lat={lat_used}, map_lon={lon_used}")
             if city_used:
                 if lang_used == "de":
                     intro = (
@@ -806,23 +794,22 @@ def render_chat(language, sessions, active_session, city):
                         dcc.Markdown(intro, className="markdown-content", style={"marginBottom": "12px"}),
                         map_widget,
                     ], style={"flex": "1", "minWidth": "0"}),
-                ], style=CHAT_ROW)
-            # No location available → plain text fallback
+                ], key=k, style=CHAT_ROW)
             return html.Div([
                 html.Img(src="/assets/robo_head.png", style=AVATAR),
                 html.Div(
                     dcc.Markdown(msg.get("content", ""), className="markdown-content", style={"margin": 0}),
                     style={**CHAT_BUBBLE_BOT, "maxWidth": "fit-content"},
                 ),
-            ], style=CHAT_ROW)
+            ], key=k, style=CHAT_ROW)
 
         else:
             return html.Div([
                 html.Img(src="/assets/robo_head.png", style=AVATAR),
                 html.Div(dcc.Markdown(msg.get("content", ""), className="markdown-content", style={"margin": 0}), style={**CHAT_BUBBLE_BOT, "maxWidth": "fit-content"}),
-            ], style=CHAT_ROW)
+            ], key=k, style=CHAT_ROW)
 
-    return html.Div([make_msg(m) for m in messages], style={"padding": "28px 0", "maxWidth": "920px", "margin": "0 auto"})
+    return html.Div([make_msg(m, i) for i, m in enumerate(messages)], style={"padding": "28px 0", "maxWidth": "920px", "margin": "0 auto"})
 
 @app.callback(
     [Output("sessions-store", "data", allow_duplicate=True), Output("active-session-store", "data", allow_duplicate=True),
