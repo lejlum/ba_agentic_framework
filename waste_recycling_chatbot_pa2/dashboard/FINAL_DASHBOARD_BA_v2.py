@@ -402,10 +402,8 @@ CHAT_ROW = {"display": "flex", "alignItems": "flex-end", "gap": "12px", "marginB
 
 
 def make_map_card(zip_code: str, language: str, city: str = "", elements: list = None, lat: float = None, lon: float = None):
-    """Interactive Leaflet map.
-    Geocoding is done entirely client-side (JS → Nominatim) so it is not
-    blocked by Python network issues or Dash callback timeouts.
-    """
+    """Interactive Leaflet map."""
+    print(f"[MAP] make_map_card: lat={lat}, lon={lon}, zip={zip_code!r}, city={city!r}")
     texts = get_texts(language)
     location_label = zip_code or city or "CH"
     # Safe JS string: escape single quotes
@@ -424,6 +422,35 @@ def make_map_card(zip_code: str, language: str, city: str = "", elements: list =
     btn_metal     = "Metall"          if language == "de" else "Metal"
     btn_supermarkt = "Laden"          if language == "de" else "Store"
     lbl_gmaps     = "In Google Maps \u00f6ffnen" if language == "de" else "Open in Google Maps"
+
+    # When the agent already resolved coordinates, bake them into JS directly \u2014
+    # no client-side Nominatim call needed, so the map centers instantly.
+    init_lat  = lat if lat is not None else 46.9481
+    init_lon  = lon if lon is not None else 7.4474
+    init_zoom = 15  if lat is not None else 8
+
+    if lat is not None and lon is not None:
+        init_js = (
+            f"L.marker([{lat}, {lon}],{{icon:hi}})"
+            f".bindPopup('<b>{home_label}</b><br>{location_label}').addTo(map);\n"
+            f"fetchOSM({lat}, {lon});"
+        )
+    else:
+        init_js = (
+            f"fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent('{query_str} Schweiz')+'&format=json&limit=1&countrycodes=ch')\n"
+            f"  .then(function(r){{return r.json();}})\n"
+            f"  .then(function(data){{\n"
+            f"    var clat = (data && data[0]) ? parseFloat(data[0].lat) : 46.9481;\n"
+            f"    var clon = (data && data[0]) ? parseFloat(data[0].lon) : 7.4474;\n"
+            f"    map.setView([clat, clon], 15);\n"
+            f"    L.marker([clat, clon],{{icon:hi}}).bindPopup('<b>{home_label}</b><br>{location_label}').addTo(map);\n"
+            f"    fetchOSM(clat, clon);\n"
+            f"  }})\n"
+            f"  .catch(function(){{\n"
+            f"    map.setView([46.9481, 7.4474], 15);\n"
+            f"    fetchOSM(46.9481, 7.4474);\n"
+            f"  }});"
+        )
 
     map_html = f"""<!DOCTYPE html>
 <html>
@@ -450,8 +477,7 @@ def make_map_card(zip_code: str, language: str, city: str = "", elements: list =
 </div>
 <div id="map"></div>
 <script>
-// Map starts zoomed out on Switzerland; client-side geocoding centres it correctly
-var map = L.map('map').setView([46.9481, 7.4474], 8);
+var map = L.map('map').setView([{init_lat}, {init_lon}], {init_zoom});
 L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{attribution:'&copy; OpenStreetMap'}}).addTo(map);
 
 var hi = L.divIcon({{html:'<div style="background:#2563eb;width:16px;height:16px;border-radius:50%;border:3px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.5)"></div>',iconSize:[16,16],iconAnchor:[8,8],className:''}});
@@ -512,20 +538,7 @@ function fetchOSM(clat, clon){{
   }}).catch(function(e){{console.log('q2:',e);}});
 }}
 
-// Client-side geocoding: browser requests Nominatim directly (reliable, no server dependency)
-fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent('{query_str} Schweiz')+'&format=json&limit=1&countrycodes=ch')
-  .then(function(r){{return r.json();}})
-  .then(function(data){{
-    var clat = (data && data[0]) ? parseFloat(data[0].lat) : 46.9481;
-    var clon = (data && data[0]) ? parseFloat(data[0].lon) : 7.4474;
-    map.setView([clat, clon], 15);
-    L.marker([clat, clon],{{icon:hi}}).bindPopup('<b>{home_label}</b><br>{location_label}').addTo(map);
-    fetchOSM(clat, clon);
-  }})
-  .catch(function(){{
-    map.setView([46.9481, 7.4474], 15);
-    fetchOSM(46.9481, 7.4474);
-  }});
+{init_js}
 </script>
 </body>
 </html>"""
@@ -774,6 +787,9 @@ def render_chat(language, sessions, active_session, zip_code, city):
             zip_used  = msg.get("zip_code", zip_code)
             city_used = msg.get("city", city)
             lang_used = msg.get("language", language)
+            lat_used  = msg.get("map_lat")
+            lon_used  = msg.get("map_lon")
+            print(f"[MAP] render: msg map_lat={lat_used}, map_lon={lon_used}")
             if zip_used or city_used:
                 loc = city_used or zip_used
                 if lang_used == "de":
@@ -792,7 +808,7 @@ def render_chat(language, sessions, active_session, zip_code, city):
                     html.Img(src="/assets/robo_head.png", style=AVATAR),
                     html.Div([
                         dcc.Markdown(intro, className="markdown-content", style={"marginBottom": "12px"}),
-                        make_map_card(zip_used, lang_used, city=city_used),
+                        make_map_card(zip_used, lang_used, city=city_used, lat=lat_used, lon=lon_used),
                     ], style={"flex": "1", "minWidth": "0"}),
                 ], style=CHAT_ROW)
             # No location available → plain text fallback
@@ -944,6 +960,7 @@ def send_message_step2(pending, sessions):
         result = agent.invoke(state, config={"configurable": {"thread_id": active_session}})
         response = result["final_response"]
         input_type = result.get("input_type", "text")
+        print(f"[MAP] step2: input_type={input_type}, map_lat={result.get('map_lat')}, map_lon={result.get('map_lon')}")
 
         agent_history[active_session] = {
             "scan_history": result.get("scan_history", []),
@@ -967,6 +984,8 @@ def send_message_step2(pending, sessions):
             "zip_code": zip_code,
             "city": city,
             "language": language or "en",
+            "map_lat": result.get("map_lat"),
+            "map_lon": result.get("map_lon"),
         })
     else:
         msgs.append({"role": "assistant", "content": response})

@@ -9,6 +9,7 @@ FIX: get_coordinates now returns coords for both ZIP codes AND city names.
 from pathlib import Path
 from typing import TypedDict, Optional, List
 from dotenv import load_dotenv
+import re
 import requests
 from huggingface_hub import hf_hub_download
 
@@ -191,46 +192,39 @@ class AgentState(TypedDict):
 def get_coordinates(location_input: str):
     """
     Resolves a Swiss ZIP code OR city name to (lat, lon, municipality).
-    Uses Nominatim with q="<input>, Switzerland" — this is the most reliable
-    approach for both ZIP codes and city names and always returns WGS84.
-    geo.admin.ch is skipped because its sr=4326 response omits lat/lon fields
-    in practice, causing silent fallbacks to wrong coordinates.
+    Uses the official geo.admin.ch SearchServer (swisstopo), which covers all
+    Swiss ZIP codes reliably. sr=4326 returns WGS84 lat/lon directly in attrs.
     """
     location_input = location_input.strip()
 
-    # Single strategy: Nominatim free-text with Switzerland constraint.
-    # Using q= instead of postalcode= or city= avoids mismatches.
     try:
         response = requests.get(
-            "https://nominatim.openstreetmap.org/search",
+            "https://api3.geo.admin.ch/rest/services/ech/SearchServer",
             params={
-                "q": f"{location_input}, Switzerland",
-                "format": "json",
-                "limit": 1,
-                "addressdetails": 1,
-                "countrycodes": "ch",
+                "searchText": location_input,
+                "type": "locations",
+                "origins": "zipcode,gg25",
+                "sr": "4326",
+                "lang": "de",
+                "limit": "1",
             },
-            headers={"User-Agent": "SwissRecyclingAssistant/1.0"},
+            headers={"User-Agent": "SwissRecyclingAssistant/1.0 (bachelor-thesis-demo)"},
             timeout=8,
         )
-        results = response.json()
+        data = response.json()
+        results = data.get("results", [])
         if results:
-            r = results[0]
-            addr = r.get("address", {})
-            municipality = (
-                addr.get("city")
-                or addr.get("town")
-                or addr.get("village")
-                or addr.get("municipality")
-                or addr.get("county")
-                or location_input
-            )
-            lat = float(r["lat"])
-            lon = float(r["lon"])
-            print(f"[DEBUG] Nominatim: '{location_input}' → {municipality} ({lat:.4f}, {lon:.4f})")
+            attrs = results[0]["attrs"]
+            lat = float(attrs["lat"])
+            lon = float(attrs["lon"])
+            # label is like "<b>9000 St. Gallen</b>" — strip HTML then leading ZIP
+            raw_label = attrs.get("label", location_input)
+            clean = re.sub(r"<[^>]+>", "", raw_label).strip()
+            municipality = re.sub(r"^\d{4}\s+", "", clean).strip() or location_input
+            print(f"[DEBUG] geo.admin.ch: '{location_input}' → {municipality} ({lat:.4f}, {lon:.4f})")
             return lat, lon, municipality
     except Exception as e:
-        print(f"[DEBUG] Nominatim error: {e}")
+        print(f"[DEBUG] geo.admin.ch error: {e}")
 
     print(f"[DEBUG] Could not resolve location: {location_input}")
     return None
