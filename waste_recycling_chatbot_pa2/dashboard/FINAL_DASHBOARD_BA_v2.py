@@ -782,9 +782,10 @@ def render_chat(language, sessions, active_session, city):
                     )
                 stored_html = msg.get("map_html")
                 if stored_html:
+                    iframe_id = f"map-iframe-{msg['map_id']}" if msg.get("map_id") else f"map-iframe-{idx}"
                     map_widget = html.Div([
                         html.Div(get_texts(lang_used)["map_title"], style={"fontWeight": "600", "fontSize": "14px", "color": "#1e40af", "marginBottom": "8px"}),
-                        html.Iframe(srcDoc=stored_html, style={"width": "100%", "height": "340px", "border": "none", "borderRadius": "8px"}),
+                        html.Iframe(id=iframe_id, srcDoc=stored_html, style={"width": "100%", "height": "340px", "border": "none", "borderRadius": "8px"}),
                     ], className="map-card", style={"width": "100%"})
                 else:
                     map_widget = make_map_card(city_used, lang_used, lat=lat_used, lon=lon_used)
@@ -965,6 +966,7 @@ def send_message_step2(pending, sessions):
             "map_lat": result.get("map_lat"),
             "map_lon": result.get("map_lon"),
             "map_html": map_html,
+            "map_id": str(uuid.uuid4())[:8],
         })
     else:
         msgs.append({"role": "assistant", "content": response})
