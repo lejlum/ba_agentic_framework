@@ -544,7 +544,7 @@ def route_after_classifier(state: AgentState):
     return "clarification" if state.get("needs_clarification") else "knowledge_base"
 
 def route_after_knowledge_base(state: AgentState):
-    return "geolocation" if state.get("city") else "response"
+    return "response"
 
 def route_after_geolocation(state: AgentState):
     if state.get("final_response"):

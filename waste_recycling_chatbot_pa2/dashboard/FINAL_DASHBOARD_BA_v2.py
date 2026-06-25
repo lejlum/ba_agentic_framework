@@ -397,10 +397,8 @@ AVATAR = {
 CHAT_ROW = {"display": "flex", "alignItems": "flex-end", "gap": "12px", "marginBottom": "20px"}
 
 
-def make_map_card(city: str, language: str, lat: float = None, lon: float = None):
-    """Interactive Leaflet map."""
-    print(f"[MAP] make_map_card: lat={lat}, lon={lon}, city={city!r}")
-    texts = get_texts(language)
+def build_map_html_str(city: str, language: str, lat: float = None, lon: float = None) -> str:
+    """Build Leaflet map HTML string — call once, cache the result in the message dict."""
     location_label = city or "CH"
     query_str = (city or "Schweiz").replace("'", "\\'")
 
@@ -538,6 +536,14 @@ function fetchOSM(clat, clon){{
 </body>
 </html>"""
 
+    return map_html
+
+
+def make_map_card(city: str, language: str, lat: float = None, lon: float = None):
+    """Wrap build_map_html_str in a Dash card component."""
+    print(f"[MAP] make_map_card: lat={lat}, lon={lon}, city={city!r}")
+    texts = get_texts(language)
+    map_html = build_map_html_str(city, language, lat, lon)
     return html.Div([
         html.Div(texts["map_title"], style={"fontWeight": "600", "fontSize": "14px", "color": "#1e40af", "marginBottom": "8px"}),
         html.Iframe(srcDoc=map_html, style={"width": "100%", "height": "340px", "border": "none", "borderRadius": "8px"}),
@@ -786,11 +792,19 @@ def render_chat(language, sessions, active_session, city):
                         f"Use the filters on the map to find specific collection points "
                         f"for aluminium, glass, cardboard, PET, hazardous waste, and more."
                     )
+                stored_html = msg.get("map_html")
+                if stored_html:
+                    map_widget = html.Div([
+                        html.Div(get_texts(lang_used)["map_title"], style={"fontWeight": "600", "fontSize": "14px", "color": "#1e40af", "marginBottom": "8px"}),
+                        html.Iframe(srcDoc=stored_html, style={"width": "100%", "height": "340px", "border": "none", "borderRadius": "8px"}),
+                    ], className="map-card", style={"width": "100%"})
+                else:
+                    map_widget = make_map_card(city_used, lang_used, lat=lat_used, lon=lon_used)
                 return html.Div([
                     html.Img(src="/assets/robo_head.png", style=AVATAR),
                     html.Div([
                         dcc.Markdown(intro, className="markdown-content", style={"marginBottom": "12px"}),
-                        make_map_card(city_used, lang_used, lat=lat_used, lon=lon_used),
+                        map_widget,
                     ], style={"flex": "1", "minWidth": "0"}),
                 ], style=CHAT_ROW)
             # No location available → plain text fallback
@@ -955,6 +969,7 @@ def send_message_step2(pending, sessions):
         msgs.pop()
 
     if input_type == "location" and city:
+        map_html = build_map_html_str(city, language or "en", result.get("map_lat"), result.get("map_lon"))
         msgs.append({
             "role": "location_result",
             "content": response,
@@ -962,6 +977,7 @@ def send_message_step2(pending, sessions):
             "language": language or "en",
             "map_lat": result.get("map_lat"),
             "map_lon": result.get("map_lon"),
+            "map_html": map_html,
         })
     else:
         msgs.append({"role": "assistant", "content": response})
