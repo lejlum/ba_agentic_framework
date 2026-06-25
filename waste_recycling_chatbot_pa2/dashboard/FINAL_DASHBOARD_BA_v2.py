@@ -58,10 +58,8 @@ def get_texts(language: str) -> Dict[str, str]:
             "chat_input": "Stellen Sie eine Frage...",
             "new_chat": "Neuer Chat",
             "language_label": "Sprache",
-            "zip_label": "PLZ",
-            "city_label": "Ort",
-            "zip_placeholder": "z.B. 8820",
-            "city_placeholder": "z.B. Wädenswil",
+            "city_label": "Ort / Gemeinde",
+            "city_placeholder": "z.B. Goldach",
             "welcome_title": "Hi, ich bin dein Swiss Recycling Assistant",
             "welcome_text": "Du bist unsicher, wie du etwas in der Schweiz recyceln sollst? Lade ein Foto deines Abfalls hoch oder stelle mir einfach direkt deine Frage.",
             "no_chats": "Keine Chatverläufe",
@@ -77,10 +75,8 @@ def get_texts(language: str) -> Dict[str, str]:
         "chat_input": "Ask a question...",
         "new_chat": "New Chat",
         "language_label": "Language",
-        "zip_label": "ZIP code",
-        "city_label": "City",
-        "zip_placeholder": "e.g. 8820",
-        "city_placeholder": "e.g. Wädenswil",
+        "city_label": "City / Town",
+        "city_placeholder": "e.g. Goldach",
         "welcome_title": "Hi, I'm your Swiss Recycling Assistant",
         "welcome_text": "Not sure how to recycle something in Switzerland? Upload a picture of your waste item or just ask me directly.",
         "no_chats": "No chat history",
@@ -107,7 +103,7 @@ app: Dash = Dash(
 server = app.server
 
 
-def build_map_html(zip_code, lat, lon, language):
+def build_map_html(city, lat, lon, language):
     """Build standalone map HTML served via Flask route."""
     home_label   = "Ihr Standort"    if language == "de" else "Your location"
     lbl_address  = "Adresse"         if language == "de" else "Address"
@@ -156,7 +152,7 @@ var homeIcon = L.divIcon({{
     iconSize:[16,16], iconAnchor:[8,8], className:''
 }});
 L.marker([{lat},{lon}], {{icon:homeIcon}})
- .bindPopup('<b>{home_label}</b><br>ZIP {zip_code}').addTo(map);
+ .bindPopup('<b>{home_label}</b><br>{city}').addTo(map);
 
 var allMarkers = [];
 
@@ -224,11 +220,11 @@ fetch('https://overpass-api.de/api/interpreter', {{
 
 @server.route('/map')
 def serve_map():
-    zip_code = flask_request.args.get('zip', '')
+    city = flask_request.args.get('city', '')
     lat = float(flask_request.args.get('lat', 47.38))
     lon = float(flask_request.args.get('lon', 8.54))
     language = flask_request.args.get('lang', 'en')
-    html_content = build_map_html(zip_code, lat, lon, language)
+    html_content = build_map_html(city, lat, lon, language)
     return Response(html_content, mimetype='text/html')
 
 
@@ -401,13 +397,12 @@ AVATAR = {
 CHAT_ROW = {"display": "flex", "alignItems": "flex-end", "gap": "12px", "marginBottom": "20px"}
 
 
-def make_map_card(zip_code: str, language: str, city: str = "", elements: list = None, lat: float = None, lon: float = None):
+def make_map_card(city: str, language: str, lat: float = None, lon: float = None):
     """Interactive Leaflet map."""
-    print(f"[MAP] make_map_card: lat={lat}, lon={lon}, zip={zip_code!r}, city={city!r}")
+    print(f"[MAP] make_map_card: lat={lat}, lon={lon}, city={city!r}")
     texts = get_texts(language)
-    location_label = zip_code or city or "CH"
-    # Safe JS string: escape single quotes
-    query_str = (zip_code or city or "Schweiz").replace("'", "\\'")
+    location_label = city or "CH"
+    query_str = (city or "Schweiz").replace("'", "\\'")
 
     home_label    = "Ihr Standort"    if language == "de" else "Your location"
     lbl_address   = "Adresse"         if language == "de" else "Address"
@@ -556,7 +551,6 @@ app.layout = html.Div([
     dcc.Store(id="sessions-store", data={}),
     dcc.Store(id="active-session-store", data=""),
     dcc.Store(id="sidebar-collapsed-store", data=False),
-    dcc.Store(id="zip-store", data=""),
     dcc.Store(id="city-store", data=""),
     dcc.Store(id="agent-history-store", data={}),
     dcc.Store(id="pending-message-store", data=None),
@@ -580,14 +574,9 @@ app.layout = html.Div([
                     ),
                 ], style={"marginBottom": "16px"}),
                 html.Div([
-                    html.Label("ZIP code", id="zip-label", className="sidebar-section-label"),
+                    html.Label("City / Town", id="city-label", className="sidebar-section-label"),
                     dbc.Input(
-                        id="zip-input", placeholder="e.g. 8820", type="text", maxLength=4,
-                        style={"borderRadius": "8px", "fontSize": "14px", "border": "1px solid #d1d5db"},
-                    ),
-                    html.Label("City", id="city-label", className="sidebar-section-label", style={"marginTop": "10px"}),
-                    dbc.Input(
-                        id="city-input", placeholder="e.g. Wädenswil", type="text",
+                        id="city-input", placeholder="e.g. Goldach", type="text",
                         style={"borderRadius": "8px", "fontSize": "14px", "border": "1px solid #d1d5db"},
                     ),
                 ], style={"marginBottom": "20px"}),
@@ -649,10 +638,6 @@ app.layout = html.Div([
 # CALLBACKS
 # ---------------------------------------------------------------------------
 
-@app.callback(Output("zip-store", "data"), Input("zip-input", "value"))
-def save_zip(value):
-    return value or ""
-
 @app.callback(Output("city-store", "data"), Input("city-input", "value"))
 def save_city(value):
     return value or ""
@@ -662,18 +647,17 @@ def update_language(lang):
     return lang or "en"
 
 @app.callback(
-    [Output("language-label", "children"), Output("zip-label", "children"),
-     Output("city-label", "children"),
+    [Output("language-label", "children"), Output("city-label", "children"),
      Output("new-chat-label", "children"), Output("history-label", "children"),
      Output("chat-input", "placeholder"), Output("upload-button-text", "children"),
-     Output("zip-input", "placeholder"), Output("city-input", "placeholder")],
+     Output("city-input", "placeholder")],
     Input("language-store", "data"),
 )
 def update_labels(language):
     texts = get_texts(language)
-    return (texts["language_label"], texts["zip_label"], texts["city_label"],
+    return (texts["language_label"], texts["city_label"],
             texts["new_chat"], texts["chat_history_label"], texts["chat_input"],
-            f" {texts['upload_button']}", texts["zip_placeholder"], texts["city_placeholder"])
+            f" {texts['upload_button']}", texts["city_placeholder"])
 
 @app.callback(
     [Output("sidebar", "className"), Output("main-content", "className")],
@@ -727,9 +711,9 @@ def update_session_list(sessions, active_session, language):
 @app.callback(
     Output("chat-content", "children"),
     [Input("language-store", "data"), Input("sessions-store", "data"), Input("active-session-store", "data"),
-     Input("zip-store", "data"), Input("city-store", "data")],
+     Input("city-store", "data")],
 )
-def render_chat(language, sessions, active_session, zip_code, city):
+def render_chat(language, sessions, active_session, city):
     texts = get_texts(language)
     messages = (sessions or {}).get(active_session, []) if active_session else []
     if not messages:
@@ -784,23 +768,21 @@ def render_chat(language, sessions, active_session, zip_code, city):
         #           as a plain assistant bubble so nothing is lost.
         # ---------------------------------------------------------------
         elif msg.get("role") == "location_result":
-            zip_used  = msg.get("zip_code", zip_code)
             city_used = msg.get("city", city)
             lang_used = msg.get("language", language)
             lat_used  = msg.get("map_lat")
             lon_used  = msg.get("map_lon")
             print(f"[MAP] render: msg map_lat={lat_used}, map_lon={lon_used}")
-            if zip_used or city_used:
-                loc = city_used or zip_used
+            if city_used:
                 if lang_used == "de":
                     intro = (
-                        f"Hier sind Recycling-Standorte in der Nähe von **{loc}**. "
+                        f"Hier sind Recycling-Standorte in der Nähe von **{city_used}**. "
                         f"Nutzen Sie die Filter auf der Karte, um Sammelstellen für "
                         f"Aluminium, Glas, Karton, PET, Sonderabfall und mehr zu finden."
                     )
                 else:
                     intro = (
-                        f"Here are recycling locations near **{loc}**. "
+                        f"Here are recycling locations near **{city_used}**. "
                         f"Use the filters on the map to find specific collection points "
                         f"for aluminium, glass, cardboard, PET, hazardous waste, and more."
                     )
@@ -808,7 +790,7 @@ def render_chat(language, sessions, active_session, zip_code, city):
                     html.Img(src="/assets/robo_head.png", style=AVATAR),
                     html.Div([
                         dcc.Markdown(intro, className="markdown-content", style={"marginBottom": "12px"}),
-                        make_map_card(zip_used, lang_used, city=city_used, lat=lat_used, lon=lon_used),
+                        make_map_card(city_used, lang_used, lat=lat_used, lon=lon_used),
                     ], style={"flex": "1", "minWidth": "0"}),
                 ], style=CHAT_ROW)
             # No location available → plain text fallback
@@ -843,14 +825,14 @@ def new_chat(n_clicks, sessions):
     return sessions, new_id, new_id
 
 @app.callback(
-    [Output("zip-input", "value"), Output("city-input", "value")],
+    Output("city-input", "value"),
     Input("new-chat-session-id", "data"),
     prevent_initial_call=True,
 )
 def clear_inputs_on_new_chat(new_session_id):
     if not new_session_id:
         raise dash.exceptions.PreventUpdate
-    return "", ""
+    return ""
 
 @app.callback(
     Output("active-session-store", "data", allow_duplicate=True),
@@ -890,11 +872,10 @@ def delete_session(n_clicks, sessions, active_session):
     [Input("send-button", "n_clicks"), Input("chat-input", "n_submit")],
     [State("chat-input", "value"), State("sessions-store", "data"),
      State("active-session-store", "data"), State("language-store", "data"),
-     State("zip-store", "data"), State("city-store", "data"),
-     State("agent-history-store", "data")],
+     State("city-store", "data"), State("agent-history-store", "data")],
     prevent_initial_call=True,
 )
-def send_message_step1(n_clicks, n_submit, user_text, sessions, active_session, language, zip_code, city, agent_history):
+def send_message_step1(n_clicks, n_submit, user_text, sessions, active_session, language, city, agent_history):
     """Step 1: Immediately display user message + thinking bubble, store pending state."""
     if (not n_clicks and not n_submit) or not user_text or not user_text.strip():
         raise dash.exceptions.PreventUpdate
@@ -915,7 +896,6 @@ def send_message_step1(n_clicks, n_submit, user_text, sessions, active_session, 
         "user_text": user_text,
         "session_id": active_session,
         "language": language,
-        "zip_code": zip_code,
         "city": city,
         "agent_history": agent_history,
     }
@@ -940,7 +920,6 @@ def send_message_step2(pending, sessions):
     user_text = pending.get("user_text", "")
     active_session = pending.get("session_id", "")
     language = pending.get("language", "en")
-    zip_code = pending.get("zip_code", "")
     city = pending.get("city", "")
     agent_history = pending.get("agent_history", {})
 
@@ -951,7 +930,7 @@ def send_message_step2(pending, sessions):
 
     try:
         state = AgentState(
-            user_message=user_text, image_path=None, zip_code=zip_code or None,
+            user_message=user_text, image_path=None, city=city or None,
             language=language or "en", classification=None, guidelines=None, collection_points=None,
             input_type=None, needs_clarification=False, final_response=None,
             osm_elements=None, map_lat=None, map_lon=None,
@@ -975,13 +954,10 @@ def send_message_step2(pending, sessions):
     if msgs and msgs[-1].get("role") == "thinking":
         msgs.pop()
 
-    if input_type == "location" and (zip_code or city):
-        # Store content for potential fallback, but the bubble won't show it
-        # (the map popup already contains address + hours + Google Maps link).
+    if input_type == "location" and city:
         msgs.append({
             "role": "location_result",
             "content": response,
-            "zip_code": zip_code,
             "city": city,
             "language": language or "en",
             "map_lat": result.get("map_lat"),
@@ -1020,11 +996,11 @@ def handle_image_step1(contents, filename, sessions, active_session):
      Output("agent-history-store", "data", allow_duplicate=True)],
     [Input("pending-image-store", "data"),
      State("language-store", "data"), State("sessions-store", "data"),
-     State("active-session-store", "data"), State("zip-store", "data"),
+     State("active-session-store", "data"),
      State("city-store", "data"), State("agent-history-store", "data")],
     prevent_initial_call=True,
 )
-def handle_image_step2(pending, language, sessions, active_session, zip_code, city, agent_history):
+def handle_image_step2(pending, language, sessions, active_session, city, agent_history):
     """Step 2: Classify image, replace thinking bubble with result."""
     if not pending or not isinstance(pending, dict):
         raise dash.exceptions.PreventUpdate
@@ -1061,7 +1037,7 @@ def handle_image_step2(pending, language, sessions, active_session, zip_code, ci
         session_state = agent_history.get(active_session, {"scan_history": [], "conv_history": []})
         state = AgentState(
             user_message="How do I dispose of this?" if language == "en" else "Wie entsorge ich das?",
-            image_path=normalized_path, zip_code=zip_code or None, language=language or "en",
+            image_path=normalized_path, city=city or None, language=language or "en",
             classification=None, guidelines=None, collection_points=None,
             input_type=None, needs_clarification=False, final_response=None,
             osm_elements=None, map_lat=None, map_lon=None,

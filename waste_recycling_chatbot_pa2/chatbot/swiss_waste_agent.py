@@ -167,7 +167,7 @@ LOCATION_KEYWORDS = [
 class AgentState(TypedDict):
     user_message: str
     image_path: Optional[str]
-    zip_code: Optional[str]        # now accepts ZIP or city name
+    city: Optional[str]
     language: str
     classification: Optional[dict]
     guidelines: Optional[str]
@@ -189,21 +189,30 @@ class AgentState(TypedDict):
 #      coordinates directly – no second geocoding in make_map_card.
 # ===========================================================================
 
-def get_coordinates(location_input: str):
+def get_coordinates(city: str):
     """
-    Resolves a Swiss ZIP code OR city name to (lat, lon, municipality).
-    Uses the official geo.admin.ch SearchServer (swisstopo), which covers all
-    Swiss ZIP codes reliably. sr=4326 returns WGS84 lat/lon directly in attrs.
+    Resolves a Swiss city/town name to (lat, lon, municipality) via geo.admin.ch.
+    City names match the gg25 municipality layer reliably.
     """
-    location_input = location_input.strip()
+    city = (city or "").strip()
+    if not city:
+        return None
+
+    search_text  = city
+    search_label = f"city='{city}'"
+    origins      = "gg25,zipcode"
+
+    # Switzerland bounding box (WGS84)
+    CH_LAT_MIN, CH_LAT_MAX = 45.8, 47.8
+    CH_LON_MIN, CH_LON_MAX = 5.9, 10.5
 
     try:
         response = requests.get(
             "https://api3.geo.admin.ch/rest/services/ech/SearchServer",
             params={
-                "searchText": location_input,
+                "searchText": search_text,
                 "type": "locations",
-                "origins": "zipcode,gg25",
+                "origins": origins,
                 "sr": "4326",
                 "lang": "de",
                 "limit": "1",
@@ -217,16 +226,22 @@ def get_coordinates(location_input: str):
             attrs = results[0]["attrs"]
             lat = float(attrs["lat"])
             lon = float(attrs["lon"])
+
+            # Reject coordinates that fall outside Switzerland
+            if not (CH_LAT_MIN <= lat <= CH_LAT_MAX and CH_LON_MIN <= lon <= CH_LON_MAX):
+                print(f"[DEBUG] geo.admin.ch: {search_label} → coords ({lat:.4f}, {lon:.4f}) outside CH, rejecting")
+                return None
+
             # label is like "<b>9000 St. Gallen</b>" — strip HTML then leading ZIP
-            raw_label = attrs.get("label", location_input)
+            raw_label = attrs.get("label", search_text)
             clean = re.sub(r"<[^>]+>", "", raw_label).strip()
-            municipality = re.sub(r"^\d{4}\s+", "", clean).strip() or location_input
-            print(f"[DEBUG] geo.admin.ch: '{location_input}' → {municipality} ({lat:.4f}, {lon:.4f})")
+            municipality = re.sub(r"^\d{4}\s+", "", clean).strip() or city
+            print(f"[DEBUG] geo.admin.ch ({search_label}): → {municipality} ({lat:.4f}, {lon:.4f})")
             return lat, lon, municipality
     except Exception as e:
         print(f"[DEBUG] geo.admin.ch error: {e}")
 
-    print(f"[DEBUG] Could not resolve location: {location_input}")
+    print(f"[DEBUG] Could not resolve location: {search_label}")
     return None
 
 
@@ -255,7 +270,7 @@ def get_osm_collection_points(lat: float, lon: float, radius: int = 2000):
     return []
 
 
-def format_collection_points(elements: list, municipality: str, zip_code: str, lang: str) -> str:
+def format_collection_points(elements: list, municipality: str, lang: str) -> str:
     glass, pet, metal, centres = [], [], [], []
 
     for el in elements:
@@ -275,7 +290,7 @@ def format_collection_points(elements: list, municipality: str, zip_code: str, l
         elif tags.get("recycling:scrap_metal") == "yes" or tags.get("recycling:metal") == "yes":
             metal.append(label)
 
-    location_label = f"{municipality} ({zip_code})" if zip_code != municipality else municipality
+    location_label = municipality
 
     if lang == "de":
         out = f"Sammelstellen in {location_label}, 2km Umkreis:\n"
@@ -355,23 +370,23 @@ def geolocation_node(state: AgentState) -> AgentState:
     FIX: stores resolved lat/lon into state so the dashboard map_card
     can use them directly without geocoding again.
     """
-    location_input = (state.get("zip_code") or "").strip()
+    city = (state.get("city") or "").strip()
     lang = state.get("language", "en")
 
-    if not location_input:
+    if not city:
         if lang == "de":
             return {**state, "collection_points": None, "map_lat": None, "map_lon": None,
-                    "final_response": "Bitte gib deine **PLZ oder deinen Ort** in der Sidebar ein – dann zeige ich dir die nächsten Sammelstellen!"}
+                    "final_response": "Bitte gib deinen **Ort** (z.B. Goldach) in der Sidebar ein – dann zeige ich dir die nächsten Sammelstellen!"}
         else:
             return {**state, "collection_points": None, "map_lat": None, "map_lon": None,
-                    "final_response": "Please enter your **ZIP code or city name** in the sidebar – then I'll show you the nearest collection points!"}
+                    "final_response": "Please enter your **city/town** (e.g. Goldach) in the sidebar – then I'll show you the nearest collection points!"}
 
-    coords = get_coordinates(location_input)
+    coords = get_coordinates(city)
     if not coords:
         if lang == "de":
-            msg = f"Ort '{location_input}' nicht gefunden. Bitte prüfe die Eingabe."
+            msg = f"Ort '{city}' nicht gefunden. Bitte prüfe die Eingabe."
         else:
-            msg = f"Location '{location_input}' not found. Please check your input."
+            msg = f"Location '{city}' not found. Please check your input."
         return {**state, "collection_points": msg, "map_lat": None, "map_lon": None}
 
     lat, lon, municipality = coords
@@ -391,11 +406,10 @@ def geolocation_node(state: AgentState) -> AgentState:
                 f"• Batteries: Free return at any retailer selling batteries\n"
                 f"• PET / Alu: COOP, Migros, Denner branches in your municipality"
             )
-        # still pass coords so the map renders at the right location
         return {**state, "collection_points": result,
                 "map_lat": lat, "map_lon": lon}
 
-    result = format_collection_points(elements, municipality, location_input, lang)
+    result = format_collection_points(elements, municipality, lang)
     return {**state, "collection_points": result, "map_lat": lat, "map_lon": lon}
 
 
@@ -530,7 +544,7 @@ def route_after_classifier(state: AgentState):
     return "clarification" if state.get("needs_clarification") else "knowledge_base"
 
 def route_after_knowledge_base(state: AgentState):
-    return "geolocation" if state.get("zip_code") else "response"
+    return "geolocation" if state.get("city") else "response"
 
 def route_after_geolocation(state: AgentState):
     if state.get("final_response"):
@@ -577,7 +591,7 @@ def main():
     agent = build_agent()
 
     language   = input("Language (en/de): ").strip().lower() or "en"
-    zip_code   = input("ZIP code or city (optional, Enter to skip): ").strip() or None
+    city       = input("City/town (optional, Enter to skip): ").strip() or None
     session_id = input("Session ID (Enter for 'default'): ").strip() or "default"
     config = {"configurable": {"thread_id": session_id}}
 
@@ -607,7 +621,7 @@ def main():
 
         state = AgentState(
             user_message=user_input, image_path=image_path,
-            zip_code=zip_code, language=language,
+            city=city, language=language,
             classification=None, guidelines=None, collection_points=None,
             input_type=None, needs_clarification=False, final_response=None,
             osm_elements=None, map_lat=None, map_lon=None,
