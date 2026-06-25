@@ -22,6 +22,7 @@ import requests
 import sys
 from pathlib import Path
 from typing import Dict, List
+from urllib.parse import quote as url_quote
 
 try:
     from pillow_heif import register_heif_opener
@@ -220,12 +221,13 @@ fetch('https://overpass-api.de/api/interpreter', {{
 
 @server.route('/map')
 def serve_map():
-    city = flask_request.args.get('city', '')
-    lat = float(flask_request.args.get('lat', 47.38))
-    lon = float(flask_request.args.get('lon', 8.54))
+    city     = flask_request.args.get('city', '')
+    lat_str  = flask_request.args.get('lat', '')
+    lon_str  = flask_request.args.get('lon', '')
     language = flask_request.args.get('lang', 'en')
-    html_content = build_map_html(city, lat, lon, language)
-    return Response(html_content, mimetype='text/html')
+    lat = float(lat_str) if lat_str else None
+    lon = float(lon_str) if lon_str else None
+    return Response(build_map_html_str(city, language, lat, lon), mimetype='text/html')
 
 
 app.index_string = '''
@@ -734,7 +736,7 @@ def render_chat(language, sessions, active_session, city):
     # idx gives React a stable key per message so it reuses DOM nodes instead of
     # recreating them — critical for keeping the map iframe from reloading.
     def make_msg(msg, idx):
-        k = f"msg-{idx}"
+        k = msg.get("mid") or f"msg-{idx}"
         if msg.get("role") == "user":
             return html.Div([
                 html.Div(msg.get("content", ""), style=CHAT_BUBBLE_USER),
@@ -767,6 +769,7 @@ def render_chat(language, sessions, active_session, city):
             lang_used = msg.get("language", language)
             lat_used  = msg.get("map_lat")
             lon_used  = msg.get("map_lon")
+            mid       = msg.get("mid") or f"loc-{idx}"
             if city_used:
                 if lang_used == "de":
                     intro = (
@@ -780,15 +783,19 @@ def render_chat(language, sessions, active_session, city):
                         f"Use the filters on the map to find specific collection points "
                         f"for aluminium, glass, cardboard, PET, hazardous waste, and more."
                     )
-                stored_html = msg.get("map_html")
-                if stored_html:
-                    iframe_id = f"map-iframe-{msg['map_id']}" if msg.get("map_id") else f"map-iframe-{idx}"
-                    map_widget = html.Div([
-                        html.Div(get_texts(lang_used)["map_title"], style={"fontWeight": "600", "fontSize": "14px", "color": "#1e40af", "marginBottom": "8px"}),
-                        html.Iframe(id=iframe_id, srcDoc=stored_html, style={"width": "100%", "height": "340px", "border": "none", "borderRadius": "8px"}),
-                    ], className="map-card", style={"width": "100%"})
-                else:
-                    map_widget = make_map_card(city_used, lang_used, lat=lat_used, lon=lon_used)
+                # Build a stable URL — browser never reloads an iframe whose src
+                # attribute stays identical, unlike srcDoc which re-evaluates aggressively.
+                lat_part = f"&lat={lat_used}" if lat_used is not None else ""
+                lon_part = f"&lon={lon_used}" if lon_used is not None else ""
+                map_src = f"/map?city={url_quote(city_used)}&lang={lang_used}{lat_part}{lon_part}"
+                map_widget = html.Div([
+                    html.Div(get_texts(lang_used)["map_title"], style={"fontWeight": "600", "fontSize": "14px", "color": "#1e40af", "marginBottom": "8px"}),
+                    html.Iframe(
+                        id=f"map-iframe-{mid}",
+                        src=map_src,
+                        style={"width": "100%", "height": "340px", "border": "none", "borderRadius": "8px"},
+                    ),
+                ], className="map-card", style={"width": "100%"})
                 return html.Div([
                     html.Img(src="/assets/robo_head.png", style=AVATAR),
                     html.Div([
@@ -811,6 +818,7 @@ def render_chat(language, sessions, active_session, city):
             ], key=k, style=CHAT_ROW)
 
     return html.Div([make_msg(m, i) for i, m in enumerate(messages)], style={"padding": "28px 0", "maxWidth": "920px", "margin": "0 auto"})
+
 
 @app.callback(
     [Output("sessions-store", "data", allow_duplicate=True), Output("active-session-store", "data", allow_duplicate=True),
@@ -891,8 +899,8 @@ def send_message_step1(n_clicks, n_submit, user_text, sessions, active_session, 
 
     user_text = user_text.strip()
 
-    sessions[active_session].append({"role": "user", "content": user_text})
-    sessions[active_session].append({"role": "thinking"})
+    sessions[active_session].append({"role": "user", "content": user_text, "mid": uuid.uuid4().hex})
+    sessions[active_session].append({"role": "thinking", "mid": uuid.uuid4().hex})
 
     pending = {
         "user_text": user_text,
@@ -957,7 +965,6 @@ def send_message_step2(pending, sessions):
         msgs.pop()
 
     if input_type == "location" and city:
-        map_html = build_map_html_str(city, language or "en", result.get("map_lat"), result.get("map_lon"))
         msgs.append({
             "role": "location_result",
             "content": response,
@@ -965,11 +972,10 @@ def send_message_step2(pending, sessions):
             "language": language or "en",
             "map_lat": result.get("map_lat"),
             "map_lon": result.get("map_lon"),
-            "map_html": map_html,
-            "map_id": str(uuid.uuid4())[:8],
+            "mid": uuid.uuid4().hex,
         })
     else:
-        msgs.append({"role": "assistant", "content": response})
+        msgs.append({"role": "assistant", "content": response, "mid": uuid.uuid4().hex})
 
     sessions[active_session] = msgs
     return sessions, agent_history
@@ -991,7 +997,7 @@ def handle_image_step1(contents, filename, sessions, active_session):
     if not active_session or active_session not in sessions:
         active_session = str(uuid.uuid4())[:8]
         sessions[active_session] = []
-    sessions[active_session].append({"role": "thinking"})
+    sessions[active_session].append({"role": "thinking", "mid": uuid.uuid4().hex})
     return sessions, active_session, {"contents": contents, "filename": filename}
 
 
@@ -1077,7 +1083,7 @@ def handle_image_step2(pending, language, sessions, active_session, city, agent_
     msgs = sessions.get(active_session, [])
     if msgs and msgs[-1].get("role") == "thinking":
         msgs.pop()
-    msgs.append({"role": "image_result", "image_src": contents, "result_data": {"content": result_content}})
+    msgs.append({"role": "image_result", "image_src": contents, "result_data": {"content": result_content}, "mid": uuid.uuid4().hex})
     sessions[active_session] = msgs
     return sessions, active_session, agent_history
 
