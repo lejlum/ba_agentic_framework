@@ -42,11 +42,45 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from chatbot.swiss_waste_agent import build_agent, AgentState
+from chatbot.improved_swiss_waste_chatbot_opensource import Config
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 agent = build_agent()
+
+
+# ---------------------------------------------------------------------------
+# CATEGORY LABELS — human-readable names for RECYCLING_GUIDE keys (de + en).
+# Fallback for unknown keys: key.replace('_', ' ').title()
+# ---------------------------------------------------------------------------
+CATEGORY_LABELS: dict = {
+    "white_glass":               {"de": "Weissglas",                          "en": "White Glass"},
+    "brown_glass":               {"de": "Braunglas",                          "en": "Brown Glass"},
+    "green_glass":               {"de": "Grünglas",                           "en": "Green Glass"},
+    "metal":                     {"de": "Metall",                             "en": "Metal"},
+    "aluminium":                 {"de": "Aluminium / Getränkedose",           "en": "Aluminium / Beverage Can"},
+    "paper":                     {"de": "Altpapier",                          "en": "Paper"},
+    "cardboard":                 {"de": "Karton / Papiertragtasche",          "en": "Cardboard / Paper Bag"},
+    "composite_carton":          {"de": "Getränkekarton (Tetrapack)",         "en": "Composite Carton (Tetrapack)"},
+    "pet":                       {"de": "PET-Flasche",                        "en": "PET Bottle"},
+    "plastic":                   {"de": "Kunststoff / Folie",                 "en": "Plastic / Film"},
+    "rigid_plastic_container":   {"de": "Hartplastikbehälter",                "en": "Rigid Plastic Container"},
+    "organic_waste":             {"de": "Bio- / Gartenabfall",                "en": "Organic / Garden Waste"},
+    "residual_waste":            {"de": "Kehricht / Restmüll",                "en": "Residual Waste"},
+    "non_waste":                 {"de": "Elektronik / Textilien (Sonderwege)","en": "Electronics / Clothing (Special Routes)"},
+    "hazardous_waste_(battery)": {"de": "Batterie / Akku",                    "en": "Battery / Accumulator"},
+    "damaged_battery":           {"de": "Beschädigter / aufgeblähter Akku",   "en": "Damaged / Swollen Battery"},
+    "aerosol_can":               {"de": "Spraydose (Sonderabfall)",           "en": "Aerosol Can (Hazardous Waste)"},
+    "incandescent_lamp":         {"de": "Glüh- / Halogenlampe",              "en": "Incandescent / Halogen Bulb"},
+    "lamp_special_disposal":     {"de": "LED / Energiespar- / Leuchtstofflampe", "en": "LED / CFL / Fluorescent Tube"},
+    "waste_oil":                 {"de": "Altöl / Speiseöl",                  "en": "Waste Oil / Cooking Oil"},
+    "thermal_receipt":           {"de": "Kassenzettel (Thermopapier)",        "en": "Receipt (Thermal Paper)"},
+    "eco_receipt":               {"de": "Öko-Bon (blauer Kassenzettel)",      "en": "Eco Receipt (Blue Receipt)"},
+    # Classifier-only categories (not in RECYCLING_GUIDE but in Config.WASTE_CATEGORIES)
+    "plastic_aluminium":         {"de": "Plastik-Aluminium-Verbund",          "en": "Plastic-Aluminium Composite"},
+    "white_glass_metal":         {"de": "Weissglas mit Metallverschluss",     "en": "White Glass with Metal Lid"},
+}
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +104,28 @@ def get_texts(language: str) -> Dict[str, str]:
             "detected": "Erkannt",
             "map_button": "Alle Sammelstellen anzeigen",
             "map_title": "Sammelstellen in der Nähe",
+            "info_button": "Info",
+            "info_modal_title": "Über diesen Assistenten",
+            "info_block1_title": "Was kann der Assistent?",
+            "info_block1_items": [
+                "Bild eines Abfall-Gegenstands hochladen → automatische Klassifizierung",
+                "Per Text fragen, wie etwas entsorgt wird",
+                "Ort/Gemeinde eingeben → Karte mit Sammelstellen in der Nähe",
+                "Sprache wählen (Deutsch / English)",
+            ],
+            "info_block2_img_title": "Bildklassifizierung",
+            "info_block2_text_title": "Textfragen",
+            "info_block2_text_body": "Per Text kannst du zu allen möglichen Recycling-Themen fragen – nicht nur zu den oben genannten Kategorien. Der Assistent kennt darüber hinaus viele weitere Fälle (z.B. Leuchtmittel, Spraydosen, Altöl, Sonderabfall, beschädigte Akkus u.v.m.).",
+            "info_block3_title": "Hinweise & Grenzen",
+            "info_block3_items": [
+                "Der Assistent bildet Schweizer Richtlinien (insb. Swiss Recycle) ab.",
+                "Regionale und kommunale Unterschiede sind möglich – im Zweifel Gemeinde oder lokale Sammelstelle fragen.",
+                "Der Bot ersetzt keine offizielle Auskunft; Angaben ohne Gewähr.",
+                "Die Bildklassifizierung kann Fehler machen – bei Unsicherheit einfach nachfragen.",
+            ],
+            "info_close": "Schliessen",
+            "info_ba_note": "Dieser Prototyp wurde im Rahmen einer Bachelorarbeit an der ZHAW Wädenswil entwickelt.",
+            "footer_ba_note": "Bachelorarbeit · ZHAW Wädenswil",
         }
     return {
         "title": "Swiss Recycling Assistant",
@@ -87,6 +143,28 @@ def get_texts(language: str) -> Dict[str, str]:
         "detected": "Detected",
         "map_button": "View all collection points",
         "map_title": "Nearby collection points",
+        "info_button": "Info",
+        "info_modal_title": "About this Assistant",
+        "info_block1_title": "What can the assistant do?",
+        "info_block1_items": [
+            "Upload a photo of a waste item → automatic classification",
+            "Ask in text how to dispose of something",
+            "Enter your city/town → map with nearby collection points",
+            "Choose language (Deutsch / English)",
+        ],
+        "info_block2_img_title": "Image Classification",
+        "info_block2_text_title": "Text questions",
+        "info_block2_text_body": "Via text you can ask about any recycling topic — not just the categories listed above. The assistant also handles many additional cases (e.g. light bulbs, aerosol cans, waste oil, hazardous waste, damaged batteries, and more).",
+        "info_block3_title": "Limits & Notes",
+        "info_block3_items": [
+            "The assistant reflects Swiss guidelines (mainly Swiss Recycle).",
+            "Regional and municipal differences are possible — when in doubt, contact your municipality or local collection point.",
+            "This bot does not replace official advice; no guarantee of accuracy.",
+            "Image classification can make mistakes — feel free to ask for clarification.",
+        ],
+        "info_close": "Close",
+        "info_ba_note": "This prototype was developed as part of a Bachelor's thesis at ZHAW Wädenswil.",
+        "footer_ba_note": "Bachelor's thesis · ZHAW Wädenswil",
     }
 
 
@@ -565,6 +643,14 @@ app.layout = html.Div([
     dcc.Store(id="pending-image-store", data=None),
     dcc.Store(id="new-chat-session-id", data=None),
 
+    dbc.Modal([
+        dbc.ModalHeader(dbc.ModalTitle(id="info-modal-title"), close_button=False),
+        dbc.ModalBody(id="info-modal-body"),
+        dbc.ModalFooter(
+            dbc.Button(id="info-modal-close-btn", n_clicks=0, color="secondary", outline=True, size="sm"),
+        ),
+    ], id="info-modal", is_open=False, scrollable=True, size="lg"),
+
     html.Div([
         html.Div([
             html.Div(
@@ -573,6 +659,14 @@ app.layout = html.Div([
                 style={"marginTop": "48px", "marginBottom": "20px", "paddingLeft": "2px"}
             ),
             html.Div([
+                dbc.Button(
+                    [html.I(className="bi bi-info-circle", style={"marginRight": "8px"}), html.Span("Info", id="info-btn-label")],
+                    id="info-btn",
+                    n_clicks=0,
+                    style={"width": "100%", "marginBottom": "16px", "borderRadius": "10px", "padding": "10px 16px",
+                           "fontSize": "13px", "fontWeight": "500", "backgroundColor": "#f1f5f9",
+                           "border": "1px solid #e2e8f0", "color": "#4b5563"},
+                ),
                 html.Div([
                     html.Label("Language", id="language-label", className="sidebar-section-label"),
                     dcc.Dropdown(
@@ -637,7 +731,9 @@ app.layout = html.Div([
             html.A("Swiss Recycle", href="https://www.swissrecycle.ch", target="_blank"),
             html.Span(" · ", style={"color": "#d1d5db", "margin": "0 8px"}),
             html.A("VetroSwiss", href="https://www.vetroswiss.ch/de/sammelstellen", target="_blank"),
-        ])
+        ]),
+        html.Div(id="footer-ba-note",
+                 style={"marginTop": "8px", "fontSize": "11px", "color": "#9ca3af", "fontStyle": "italic"}),
     ], className="app-footer"),
 ], style={"display": "flex", "flexDirection": "column", "minHeight": "100vh"})
 
@@ -658,14 +754,16 @@ def update_language(lang):
     [Output("language-label", "children"), Output("city-label", "children"),
      Output("new-chat-label", "children"), Output("history-label", "children"),
      Output("chat-input", "placeholder"), Output("upload-button-text", "children"),
-     Output("city-input", "placeholder")],
+     Output("city-input", "placeholder"), Output("info-btn-label", "children"),
+     Output("footer-ba-note", "children")],
     Input("language-store", "data"),
 )
 def update_labels(language):
     texts = get_texts(language)
     return (texts["language_label"], texts["city_label"],
             texts["new_chat"], texts["chat_history_label"], texts["chat_input"],
-            f" {texts['upload_button']}", texts["city_placeholder"])
+            f" {texts['upload_button']}", texts["city_placeholder"], texts["info_button"],
+            texts["footer_ba_note"])
 
 @app.callback(
     [Output("sidebar", "className"), Output("main-content", "className")],
@@ -869,6 +967,98 @@ def delete_session(n_clicks, sessions, active_session):
         del sessions[sid]
     new_active = active_session if active_session != sid else (list(sessions.keys())[0] if sessions else "")
     return sessions, new_active
+
+
+# ---------------------------------------------------------------------------
+# INFO MODAL — open/close + language-aware body render
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output("info-modal", "is_open"),
+    [Input("info-btn", "n_clicks"), Input("info-modal-close-btn", "n_clicks")],
+    State("info-modal", "is_open"),
+    prevent_initial_call=True,
+)
+def toggle_info_modal(_n_open, _n_close, is_open):
+    return not is_open
+
+
+@app.callback(
+    [Output("info-modal-title", "children"),
+     Output("info-modal-body", "children"),
+     Output("info-modal-close-btn", "children")],
+    [Input("language-store", "data"), Input("info-modal", "is_open")],
+    prevent_initial_call=True,
+)
+def render_info_modal(language, is_open):
+    if not is_open:
+        raise dash.exceptions.PreventUpdate
+    texts = get_texts(language)
+
+    # Block 1 — Features
+    block1 = html.Div([
+        html.H6(texts["info_block1_title"], style={"fontWeight": "600", "marginBottom": "8px"}),
+        html.Ul(
+            [html.Li(item, style={"marginBottom": "4px"}) for item in texts["info_block1_items"]],
+            style={"paddingLeft": "20px"},
+        ),
+    ], style={"marginBottom": "20px"})
+
+    # Block 2 — Classifier classes (Config.WASTE_CATEGORIES, exactly what the model was trained on)
+    img_classes = Config.WASTE_CATEGORIES
+    cat_labels = []
+    for key in img_classes:
+        label_dict = CATEGORY_LABELS.get(key, {})
+        label = label_dict.get(language) or label_dict.get("en") or key.replace("_", " ").title()
+        cat_labels.append(label)
+    cat_labels.sort()
+    mid = (len(cat_labels) + 1) // 2
+    col1, col2 = cat_labels[:mid], cat_labels[mid:]
+
+    n = len(img_classes)
+    img_heading = (
+        f"{texts['info_block2_img_title']} ({n} Kategorien)"
+        if language == "de"
+        else f"{texts['info_block2_img_title']} ({n} categories)"
+    )
+
+    block2 = html.Div([
+        html.H6(img_heading, style={"fontWeight": "600", "marginBottom": "8px"}),
+        dbc.Row([
+            dbc.Col(
+                html.Ul([html.Li(l, style={"marginBottom": "2px"}) for l in col1],
+                        style={"paddingLeft": "20px", "marginBottom": "0"}),
+                md=6,
+            ),
+            dbc.Col(
+                html.Ul([html.Li(l, style={"marginBottom": "2px"}) for l in col2],
+                        style={"paddingLeft": "20px", "marginBottom": "0"}),
+                md=6,
+            ),
+        ]),
+        html.Div([
+            html.Strong(texts["info_block2_text_title"] + ": ", style={"fontSize": "13px"}),
+            html.Span(texts["info_block2_text_body"], style={"fontSize": "13px", "color": "#4b5563"}),
+        ], style={"marginTop": "14px", "padding": "10px 12px", "backgroundColor": "#f8fafc",
+                  "borderRadius": "6px", "border": "1px solid #e2e8f0"}),
+    ], style={"marginBottom": "20px"})
+
+    # Block 3 — Limits
+    block3 = html.Div([
+        html.H6(texts["info_block3_title"], style={"fontWeight": "600", "marginBottom": "8px"}),
+        html.Ul(
+            [html.Li(item, style={"marginBottom": "4px"}) for item in texts["info_block3_items"]],
+            style={"paddingLeft": "20px"},
+        ),
+    ])
+
+    ba_note = html.Div(
+        texts["info_ba_note"],
+        style={"marginTop": "20px", "fontSize": "11px", "color": "#9ca3af",
+               "textAlign": "center", "fontStyle": "italic"},
+    )
+
+    body = html.Div([block1, html.Hr(), block2, html.Hr(), block3, ba_note])
+    return texts["info_modal_title"], body, texts["info_close"]
 
 
 # ---------------------------------------------------------------------------
