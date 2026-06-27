@@ -54,6 +54,11 @@ TEXT_CATEGORY_MAP = {
     "juice carton": "composite_carton", "milk box": "composite_carton",
     "tetra brik": "composite_carton",
 
+    # Papiertragtasche: Swiss Recycle (papier-und-karton) → Kartonsammlung, nicht Papier.
+    # Compound keys before "paper bag" so span-overlap blocks the generic "paper" key.
+    "paper carrier bag": "cardboard",   "paper bag": "cardboard",
+    "papiertragtasche": "cardboard",    "papiertragetasche": "cardboard",
+    "papiertüte": "cardboard",          "papiersack": "cardboard",
     "cardboard": "cardboard", "carton": "cardboard",
     "paper": "paper", "newspaper": "paper", "magazine": "paper",
 
@@ -65,11 +70,39 @@ TEXT_CATEGORY_MAP = {
     "brown glass": "brown_glass",
     "green bottle": "green_glass", "green glass": "green_glass",
 
+    # Spraydosen (Haarspray, Deo, Schlagrahm): Swiss Recycle (sonderabfall) → Sonderabfall,
+    #   NICHT Alu/Metall, NICHT Kehricht (Druckbehälter, Treibgas-Explosionsgefahr).
+    #   Hinweis: kantonale Regeln uneinheitlich; Dachverbandslinie = Sonderabfall.
+    # Compound keys before generic: "schlagrahm spraydose" before "spraydose"; "spray can" before "can".
+    "schlagrahm spraydose": "aerosol_can",   "schlagrahm sprühdose": "aerosol_can",
+    "rahm-spraydose": "aerosol_can",         "deodorant spray": "aerosol_can",
+    "hair spray": "aerosol_can",             "aerosol can": "aerosol_can",
+    "spray can": "aerosol_can",              "hairspray": "aerosol_can",
+    "aerosol": "aerosol_can",                "haarspray": "aerosol_can",
+    "haarlack": "aerosol_can",               "deospray": "aerosol_can",
+    "rasierschaum": "aerosol_can",           "schaumfestiger": "aerosol_can",
+    "sprührahm": "aerosol_can",              "spraydose": "aerosol_can",
+    "sprühdose": "aerosol_can",
+
     "aluminium": "aluminium", "aluminum": "aluminium",
     "tin can": "aluminium", "can": "aluminium",
     "nespresso": "aluminium", "coffee capsule": "aluminium", "capsule": "aluminium",
     "foil": "aluminium", "yogurt lid": "aluminium", "tin foil": "aluminium",
-    "spray can": "aluminium", "beverage can": "aluminium",
+    "beverage can": "aluminium",
+
+    # --- Beschädigte/aufgeblähte Akkus → Sonderentsorgung mit Sicherheitswarnung ---
+    # Source: INOBAT (inobat.ch), BAFU guidelines for damaged/swollen Li-ion batteries.
+    # NOTE: image classifier maps all batteries to hazardous_waste_(battery); the text path
+    # handles the swollen/damaged subtype — visual distinction is not possible via classifier.
+    # These compound keys MUST appear before "battery"/"batterie" in dict order so the
+    # knowledge_base_node loop matches the more specific category first.
+    "swollen battery": "damaged_battery",       "swollen lithium": "damaged_battery",
+    "damaged battery": "damaged_battery",       "leaking battery": "damaged_battery",
+    "puffed battery": "damaged_battery",        "bloated battery": "damaged_battery",
+    "defekte batterie": "damaged_battery",      "aufgeblähte batterie": "damaged_battery",
+    "aufgeblähter akku": "damaged_battery",     "beschädigter akku": "damaged_battery",
+    "geschwollene batterie": "damaged_battery", "auslaufende batterie": "damaged_battery",
+    "defekter akku": "damaged_battery",         "swollen akku": "damaged_battery",
 
     "battery": "hazardous_waste_(battery)",
     "batteries": "hazardous_waste_(battery)",
@@ -94,8 +127,26 @@ TEXT_CATEGORY_MAP = {
     "wrapper": "plastic",
 
     "residual waste": "residual_waste",
-    "receipt": "residual_waste", "thermal paper": "residual_waste",
     "diaper": "residual_waste", "nappy": "residual_waste",
+
+    # --- Kassenzettel/Bons: differenziert nach Bon-Typ ---
+    # Sources: Migros / 20min (blaue Bons recyclingfähig, physikalischer Druck),
+    # INGEDE / VKU (Vorsicht: Farbpigmente stören Altpapier-Recycling, kleine Mengen ok).
+    # Weiss/klassisch = Kehricht. Blau/Öko = Altpapier möglich, im Zweifel Kehricht.
+    # Compound eco-receipt keys MUST appear before the generic keys so the loop matches
+    # the more specific category first (e.g. "blauen kassenzettel" before "kassenzettel").
+    "blue receipt": "eco_receipt",         "blauer kassenzettel": "eco_receipt",
+    "blauen kassenzettel": "eco_receipt",  "blauer kassenbon": "eco_receipt",
+    "blauen kassenbon": "eco_receipt",     "blauer bon": "eco_receipt",
+    "blauen bon": "eco_receipt",           "öko-bon": "eco_receipt",
+    "ökobon": "eco_receipt",               "migros kassenzettel": "eco_receipt",
+    "migros kassenbon": "eco_receipt",     "migros bon": "eco_receipt",
+    "receipt": "thermal_receipt",          "thermal paper": "thermal_receipt",
+    "thermal receipt": "thermal_receipt",  "white receipt": "thermal_receipt",
+    "kassenzettel": "thermal_receipt",     "kassenbon": "thermal_receipt",
+    "kassenbeleg": "thermal_receipt",      "quittung": "thermal_receipt",
+    "thermopapier": "thermal_receipt",     "weisser kassenzettel": "thermal_receipt",
+    "weissen kassenzettel": "thermal_receipt",
 
     # German
     "altpapier": "paper", "zeitung": "paper", "zeitschrift": "paper",
@@ -114,7 +165,7 @@ TEXT_CATEGORY_MAP = {
     "alu": "aluminium", "aludose": "aluminium", "dose": "aluminium",
     "nespressokapsel": "aluminium", "kaffekapsel": "aluminium",
     "alufolie": "aluminium", "joghurtdeckel": "aluminium",
-    "sprühdose": "aluminium", "getränkedose": "aluminium",
+    "getränkedose": "aluminium",
 
     "batterie": "hazardous_waste_(battery)",
     "batterien": "hazardous_waste_(battery)",
@@ -145,8 +196,42 @@ TEXT_CATEGORY_MAP = {
 
     "kehricht": "residual_waste",
     "restmüll": "residual_waste",
-    "kassenzettel": "residual_waste",
     "windel": "residual_waste",
+
+    # --- Leuchtmittel: Glüh- + Halogen → Kehricht ---
+    # NOTE: image classifier has no lamp classes; these categories are text-path only.
+    # Keys are long/compound — no false-positive substring risk (e.g. "glühbirne" ≠ "Birne"/fruit).
+    "glühlampe": "incandescent_lamp",    "glühlampen": "incandescent_lamp",
+    "glühbirne": "incandescent_lamp",    "glühbirnen": "incandescent_lamp",
+    "glühbrine": "incandescent_lamp",    "glüehbire": "incandescent_lamp",
+    "halogenlampe": "incandescent_lamp", "halogenlampen": "incandescent_lamp",
+    "halogenbirne": "incandescent_lamp", "halogen": "incandescent_lamp",
+    "light bulb": "incandescent_lamp",   "incandescent": "incandescent_lamp",
+    "halogen lamp": "incandescent_lamp", "halogen bulb": "incandescent_lamp",
+
+    # --- Leuchtmittel: LED / Energiespar / Leuchtstoff → Sammelstelle (VREG) ---
+    # Longer/compound keys listed before shorter substrings so the first-match loop hits
+    # the more specific term first (e.g. "energiesparlampe" before "sparlampe").
+    "led lampe": "lamp_special_disposal",              "led-lampe": "lamp_special_disposal",
+    "ledlampe": "lamp_special_disposal",               "led birne": "lamp_special_disposal",
+    "energiesparlampe": "lamp_special_disposal",       "sparlampe": "lamp_special_disposal",
+    "kompaktleuchtstofflampe": "lamp_special_disposal",
+    "leuchtstoffröhre": "lamp_special_disposal",       "leuchtstofflampe": "lamp_special_disposal",
+    "neonröhre": "lamp_special_disposal",              "neonlampe": "lamp_special_disposal",
+    "led lamp": "lamp_special_disposal",               "energy saving lamp": "lamp_special_disposal",
+    "fluorescent tube": "lamp_special_disposal",       "fluorescent": "lamp_special_disposal",
+
+    # --- Altöl / Öl → getrennte Altölsammlung ---
+    # Source: Swiss Recycle (swissrecycle.ch/de/wertstoffe-wissen/wertstoffe/oel), ergänzend BAFU.
+    # Altöl = getrennte Sammlung (NICHT Sonderabfall; Sonderabfall = Benzin/Sprit/Farben).
+    # Motorenöl: Sammelstelle + Garagen/Verkaufsstellen. Nicht in Kehricht/Kanalisation.
+    "motorenöl": "waste_oil",   "motoröl": "waste_oil",   "altöl": "waste_oil",
+    "getriebeöl": "waste_oil",  "schmieröl": "waste_oil",
+    "frittieröl": "waste_oil",  "speiseöl": "waste_oil",  "bratöl": "waste_oil",
+    "öl": "waste_oil",          # short key — safe via word-boundary regex in knowledge_base_node
+    "motor oil": "waste_oil",   "engine oil": "waste_oil",  "used oil": "waste_oil",
+    "cooking oil": "waste_oil", "frying oil": "waste_oil",  "waste oil": "waste_oil",
+    "oil": "waste_oil",         # short key — safe via word-boundary regex (won't match "foil", "coil")
 }
 
 LOCATION_KEYWORDS = [
@@ -171,6 +256,7 @@ class AgentState(TypedDict):
     language: str
     classification: Optional[dict]
     guidelines: Optional[str]
+    guidelines_list: Optional[List]   # multi-item: [{"category": str, "guideline": str}, ...]
     collection_points: Optional[str]
     input_type: Optional[str]
     needs_clarification: bool
@@ -324,7 +410,7 @@ def perception_node(state: AgentState) -> AgentState:
 
     if image_path and Path(image_path).exists():
         input_type = "image"
-    elif any(w in msg for w in LOCATION_KEYWORDS):
+    elif any(re.search(r'\b' + re.escape(kw) + r'\b', msg, re.UNICODE) for kw in LOCATION_KEYWORDS):
         input_type = "location"
     else:
         input_type = "text"
@@ -347,22 +433,50 @@ def classifier_node(state: AgentState) -> AgentState:
             "scan_history": history}
 
 
+_MAX_CATEGORIES = 4  # cap multi-item context to avoid overwhelming the LLM
+
 def knowledge_base_node(state: AgentState) -> AgentState:
     lang = state.get("language", "en")
     classification = state.get("classification") or {}
-    category = classification.get("category", "")
+    category_from_classifier = classification.get("category", "")
 
-    if not category:
+    if category_from_classifier:
+        # Image path: single category from classifier — no multi-match needed
+        guide = RECYCLING_GUIDE.get(category_from_classifier, {})
+        gl = guide.get(lang, guide.get("en", "No guidelines found."))
+        guidelines_list = [{"category": category_from_classifier, "guideline": gl}]
+    else:
+        # Text path: collect ALL matching categories with position-based overlap detection.
+        # More-specific/compound keys appear earlier in TEXT_CATEGORY_MAP and are matched
+        # first; their character spans are recorded so sub-phrases (e.g. "kassenzettel"
+        # inside "blauen kassenzettel") don't register as a separate category.
         msg = state["user_message"].lower()
-        for term, mapped_category in TEXT_CATEGORY_MAP.items():
-            if term in msg:
-                category = mapped_category
-                print(f"[DEBUG] text mapped '{term}' -> '{category}'")
-                break
+        covered_spans: list = []  # (start, end) of already-claimed char ranges
+        guidelines_list = []
 
-    guide = RECYCLING_GUIDE.get(category, {})
-    guidelines = guide.get(lang, guide.get("en", "No guidelines found."))
-    return {**state, "guidelines": guidelines}
+        for term, mapped_category in TEXT_CATEGORY_MAP.items():
+            if len(guidelines_list) >= _MAX_CATEGORIES:
+                break
+            if any(item["category"] == mapped_category for item in guidelines_list):
+                continue  # category already collected
+
+            pattern = r'\b' + re.escape(term) + r'\b'
+            for match in re.finditer(pattern, msg, re.UNICODE):
+                s, e = match.span()
+                overlaps = any(
+                    cs <= s < ce or cs < e <= ce or (s <= cs and e >= ce)
+                    for cs, ce in covered_spans
+                )
+                if not overlaps:
+                    guide = RECYCLING_GUIDE.get(mapped_category, {})
+                    gl = guide.get(lang, guide.get("en", "No guidelines found."))
+                    guidelines_list.append({"category": mapped_category, "guideline": gl})
+                    covered_spans.append((s, e))
+                    print(f"[DEBUG] text mapped '{term}' -> '{mapped_category}' (pos {s}-{e})")
+                    break  # one valid occurrence of this term is enough
+
+    single_guideline = guidelines_list[0]["guideline"] if guidelines_list else "No guidelines found."
+    return {**state, "guidelines": single_guideline, "guidelines_list": guidelines_list}
 
 
 def geolocation_node(state: AgentState) -> AgentState:
@@ -413,12 +527,38 @@ def geolocation_node(state: AgentState) -> AgentState:
     return {**state, "collection_points": result, "map_lat": lat, "map_lon": lon}
 
 
+def _strip_map_references(text: str) -> str:
+    """Remove sentences containing map-reference phrases when no map was generated.
+    Safety net: only called when collection_points is empty."""
+    map_phrases = [
+        r'schau\s+auf\s+die\s+karte',
+        r'auf\s+der\s+karte\s+(?:oben|unten)',
+        r'sieh(?:e)?\s+(?:dir\s+)?die\s+karte',
+        r'check\s+the\s+map',
+        r'on\s+the\s+map\s+(?:above|below)',
+        r'see\s+the\s+map',
+        r'refer\s+to\s+the\s+map',
+        r'view\s+the\s+map',
+    ]
+    combined = '|'.join(f'(?:{p})' for p in map_phrases)
+    # Remove the full sentence (up to . ! ? or line break) containing a map phrase
+    sentence_re = re.compile(
+        r'[^.!?\n]*(?:' + combined + r')[^.!?\n]*[.!?]?\s*',
+        re.IGNORECASE,
+    )
+    result = sentence_re.sub('', text)
+    result = re.sub(r'[ \t]+\n', '\n', result)
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    return result.strip()
+
+
 def response_node(state: AgentState) -> AgentState:
     lang = state.get("language", "en")
     classification = state.get("classification")
     guidelines = state.get("guidelines", "")
     collection_points = state.get("collection_points", "")
     conv_history = state.get("conversation_history", [])
+    has_map = bool(collection_points)
 
     # input_type == "location" → new map generated NOW → appears BELOW
     # input_type != "location" → follow-up → map was in previous message → ABOVE
@@ -429,45 +569,63 @@ def response_node(state: AgentState) -> AgentState:
         system = f"""Du bist ein Experte für Schweizer Abfallwirtschaft nach Swiss Recycle Richtlinien.
 
 Regeln:
+- SPRACHE (strikte Anforderung, keine Ausnahme): Antworte AUSSCHLIESSLICH auf Deutsch, unabhängig davon, in welcher Sprache der Nutzer schreibt. Selbst wenn die Eingabe englisch, französisch oder in einer anderen Sprache ist – die gesamte Antwort muss auf Deutsch sein. Das ist eine harte Vorgabe der Benutzeroberfläche.
 - Beantworte nur Fragen zur Abfallentsorgung in der Schweiz
 - Basiere Antworten NUR auf den bereitgestellten Richtlinien
 - Halte Antworten kurz: maximal 2-3 Sätze
 - KRITISCH: Wenn der Nutzer nach einer SPEZIFISCHEN Kategorie fragt (Glas, PET, Metall, Papier etc.), antworte NUR zu dieser Kategorie
 - Schlage immer eine konkrete Aktion vor
 - Verwende: Kehricht, Gemeinde, Entsorgungshof
-- Füge KEINE Links hinzu – die Karte wird direkt im Chat angezeigt
+- Füge KEINE Links hinzu
 - Entferne ALLE recycling-map.ch Links aus deiner Antwort
-- Wenn Sammelstellen im Kontext vorhanden sind, verweise auf die Karte mit 'Schau auf die Karte {map_direction}' – beschreibe Standorte NIE im Text
-- Wenn ein Ort und Sammelstellen im Kontext vorhanden sind, bestätige den Ort und verweise auf die Karte – frage NIEMALS erneut nach dem Ort
+- KARTE (verbindlich – prüfe MAP_AVAILABLE im Kontext): Verweise NUR dann auf die Karte ('Schau auf die Karte {map_direction}'), wenn im Kontext 'MAP_AVAILABLE: yes' steht. Wenn 'MAP_AVAILABLE: no' steht, erwähne KEINE Karte und sage NICHT 'Schau auf die Karte' – nenne stattdessen die Entsorgungsart allgemein (z.B. Rückgabe im Verkaufsgeschäft oder bei einer SENS-Sammelstelle)
+- Wenn Sammelstellen und MAP_AVAILABLE: yes im Kontext stehen, bestätige den Ort und verweise auf die Karte – frage NIEMALS erneut nach dem Ort
 - Sage NIEMALS dass es ein Problem mit der PLZ oder dem Ort gibt
 - Wiederhole keine Informationen die bereits im Gespräch genannt wurden
-- Antworte in der Sprache in der der Nutzer schreibt"""
+- Wenn im Kontext MEHRERE Items mit eigenen Entsorgungsregeln aufgeführt sind: Beantworte JEDES Item separat mit seiner eigenen Regel. Übertrage die Regel eines Items NIEMALS auf ein anderes."""
     else:
         map_direction = "below" if is_new_location_query else "above"
         system = f"""You are a Swiss waste management expert following Swiss Recycle guidelines.
 
 Rules:
+- LANGUAGE (strict requirement, no exceptions): Answer EXCLUSIVELY in English, regardless of the language the user writes in. Even if the user's message or the waste item name is in German, French, or any other language, your entire response must be in English. This is a hard constraint set by the user interface.
 - Only answer questions about waste disposal in Switzerland
 - Base answers ONLY on the provided guidelines
 - Keep answers concise: maximum 2-3 sentences
 - CRITICAL: If the user asks about a SPECIFIC category (glass, PET, metal, paper etc.), ONLY answer about that category
 - Always suggest one concrete action
 - Use Swiss terms: residual waste, municipality, recycling centre
-- Do NOT include any links – the map is shown directly in the chat
+- Do NOT include any links
 - Remove ALL recycling-map.ch links from your response
-- If collection points are shown in the context, refer to the map with 'Check the map {map_direction}' – never describe locations in text
-- If a location and collection points are provided, confirm the location and refer to the map – NEVER ask for location again
+- MAP RULE (mandatory – check MAP_AVAILABLE in context): Refer to the map ('Check the map {map_direction}') ONLY if the context contains 'MAP_AVAILABLE: yes'. If 'MAP_AVAILABLE: no', do NOT mention any map and do NOT say 'Check the map' — describe the disposal method in general terms instead (e.g. return to retailer or SENS collection point)
+- If collection points and MAP_AVAILABLE: yes are in the context, confirm the location and refer to the map – NEVER ask for location again
 - NEVER say there is an issue with the ZIP code or location
 - Do not repeat information already given in the conversation
-- Answer in the same language the user writes in"""
+- If the context lists MULTIPLE items with separate disposal rules: answer EACH item individually using only its own rule. Never apply one item's disposal rule to another item."""
 
     context = ""
+    guidelines_list = state.get("guidelines_list") or []
     if classification:
         context += f"Detected category: {classification['category'].replace('_', ' ').title()}\n\n"
-    if guidelines:
+    if len(guidelines_list) > 1:
+        if lang == "de":
+            context += "Erkannte Items und Entsorgungsregeln (jedes Item separat beantworten):\n"
+        else:
+            context += "Detected items and disposal rules (answer each item separately):\n"
+        for item in guidelines_list:
+            cat_label = item["category"].replace("_", " ").title()
+            context += f"- {cat_label}: {item['guideline']}\n\n"
+    elif guidelines_list:
+        context += f"Swiss Recycle guideline:\n{guidelines_list[0]['guideline']}\n\n"
+    elif guidelines:
         context += f"Swiss Recycle guideline:\n{guidelines}\n\n"
     if collection_points:
         context += f"Collection points:\n{collection_points}\n\n"
+    # Explicit signal so the LLM never needs to infer map availability from the topic
+    if has_map:
+        context += "MAP_AVAILABLE: yes – you may refer to the map.\n\n"
+    else:
+        context += "MAP_AVAILABLE: no – do NOT mention any map or say 'check the map'.\n\n"
     if state.get("needs_clarification") and classification:
         top3 = classification.get("top3_predictions", [])
         if len(top3) >= 2:
@@ -488,6 +646,9 @@ Rules:
             answer = f"Es ist ein Fehler aufgetreten. Bitte versuche es erneut. ({e})"
         else:
             answer = f"An error occurred. Please try again. ({e})"
+
+    if not has_map:
+        answer = _strip_map_references(answer)
 
     return {
         **state,

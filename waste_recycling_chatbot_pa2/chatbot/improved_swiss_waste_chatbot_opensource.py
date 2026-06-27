@@ -121,8 +121,8 @@ RECYCLING_GUIDE = {
     "cardboard": {
         "allow_curbside": True,
         "primary_channels": ["curbside", "recycling_center"],
-        "en": "Flatten all cardboard boxes before disposal. Many municipalities collect cardboard at the curb on scheduled collection days—consult your local waste collection calendar for specific dates. Alternatively, cardboard may be brought to recycling centers. Accepted items include shipping boxes, cereal boxes, and egg cartons. Remove plastic tape, staples, and styrofoam packaging. Cardboard must be clean and dry. Verify your municipality's size restrictions.",
-        "de": "Alle Kartonschachteln vor der Entsorgung flach zusammenlegen. Viele Gemeinden sammeln Karton an der Strasse an festgelegten Sammeltagen—konsultieren Sie Ihren lokalen Abfallkalender für spezifische Termine. Alternativ kann Karton zu Recyclingzentren gebracht werden. Angenommene Gegenstände umfassen Versandkartons, Müslischachteln und Eierkartons. Plastikklebeband, Heftklammern und Styroporverpackungen entfernen. Karton muss sauber und trocken sein. Grössenbeschränkungen Ihrer Gemeinde prüfen."
+        "en": "Flatten all cardboard boxes before disposal. Many municipalities collect cardboard at the curb on scheduled collection days—consult your local waste collection calendar for specific dates. Alternatively, cardboard may be brought to recycling centers. Accepted items include shipping boxes, cereal boxes, egg cartons, and folded paper carrier bags (without plastic coating). Remove plastic tape, staples, and styrofoam packaging. Cardboard must be clean and dry. Verify your municipality's size restrictions.",
+        "de": "Alle Kartonschachteln vor der Entsorgung flach zusammenlegen. Viele Gemeinden sammeln Karton an der Strasse an festgelegten Sammeltagen—konsultieren Sie Ihren lokalen Abfallkalender für spezifische Termine. Alternativ kann Karton zu Recyclingzentren gebracht werden. Angenommene Gegenstände umfassen Versandkartons, Müslischachteln, Eierkartons und gefaltete Papiertragtaschen (ohne Kunststoffbeschichtung). Plastikklebeband, Heftklammern und Styroporverpackungen entfernen. Karton muss sauber und trocken sein. Grössenbeschränkungen Ihrer Gemeinde prüfen."
     },
     "composite_carton": {
         "allow_curbside": False,
@@ -171,7 +171,65 @@ RECYCLING_GUIDE = {
         "primary_channels": ["curbside_paid"],
         "en": "Residual waste is for non-recyclable items only. Dispose of items in official municipal waste bags (must be purchased) or authorized containers. Collection days vary by municipality—consult your local waste collection calendar. Accepted items include soiled items, non-recyclable plastics, broken ceramics, ashes, and hygiene products. Fees are charged via the bag/sticker system (polluter-pays principle).",
         "de": "Kehricht ist nur für nicht recycelbare Gegenstände vorgesehen. Gegenstände in offiziellen kommunalen Abfallsäcken (kostenpflichtig) oder autorisierten Containern entsorgen. Sammeltage variieren je nach Gemeinde—konsultieren Sie Ihren lokalen Abfallkalender. Angenommene Gegenstände umfassen verschmutzte Gegenstände, nicht recycelbare Kunststoffe, zerbrochene Keramik, Asche und Hygieneprodukte. Gebühren werden über das Sack-/Stickersystem erhoben (Verursacherprinzip)."
-    }
+    },
+    # Source: Swiss Recycle (swissrecycle.ch/wertstoffe/leuchtmittel),
+    # SENS eRecycling (übernahm SLRS 2021), Rechtsgrundlage VREG.
+    # Glüh-/Halogenlampen: Kehricht. LED/Energiespar/Leuchtstoff: Rücknahme Handel/SENS.
+    "incandescent_lamp": {
+        "allow_curbside": True,
+        "primary_channels": ["curbside_paid"],
+        "en": "Incandescent and halogen light bulbs belong in the residual waste (Kehricht/Hausmüll) — they are non-hazardous and the metal filament cannot be separated from the glass. Do not place in glass containers. Dispose of in the official waste bag, wrapped carefully to prevent breakage.",
+        "de": "Glüh- und Halogenlampen gehören in den Kehricht (Hausmüll) – sie sind schadstofffrei und der Metallwendel lässt sich nicht vom Glas trennen. Nicht in den Glascontainer. Im kostenpflichtigen Kehrichtsack entsorgen, gut verpackt zum Schutz vor Glasbruch.",
+    },
+    "lamp_special_disposal": {
+        "allow_curbside": False,
+        "primary_channels": ["shop_takeback", "special_collection"],
+        "en": "LED lamps, energy-saving lamps (compact fluorescent lamps), and fluorescent tubes must NOT be disposed of in residual waste. Return them free of charge to any retailer or a SENS eRecycling collection point (mandatory take-back under VREG). Energy-saving lamps contain mercury — do not break them. Do not place in glass containers.",
+        "de": "LED-Lampen, Energiesparlampen (Kompaktleuchtstofflampen) und Leuchtstoffröhren dürfen NICHT in den Hausmüll. Kostenlose Rückgabe im Verkaufsgeschäft oder bei einer SENS-eRecycling-Sammelstelle (gesetzliche Rücknahmepflicht nach VREG). Energiesparlampen enthalten Quecksilber – nicht zerbrechen lassen. Nicht in den Glascontainer.",
+    },
+    # Source: Swiss Recycle (swissrecycle.ch/de/wertstoffe-wissen/wertstoffe/oel), ergänzend BAFU.
+    # Altöl = getrennte Sammlung (NICHT Sonderabfall; Sonderabfall = Benzin/Sprit/Farben).
+    # Motorenöl: Sammelstelle + Garagen/Verkaufsstellen. Nicht in Kehricht/Kanalisation.
+    "waste_oil": {
+        "allow_curbside": False,
+        "primary_channels": ["recycling_center", "shop_takeback"],
+        "en": "Used motor oil, gearbox oil, lubricating oil, and cooking/frying oil must be brought to designated waste-oil collection points (recycling centres / Entsorgungshof). Motor oil can additionally be returned free of charge at garages and retail outlets that sell oil (e.g. hardware stores), in typical household quantities. Do not dispose of in residual waste and never pour down the drain.",
+        "de": "Altöl (Motoren-, Getriebe-, Schmieröl) sowie Speise- und Frittieröl gehören in die Altölsammlung an Sammelstellen und Entsorgungshöfen. Motorenöl kann zusätzlich bei Garagen und Verkaufsstellen (z.B. Fach-/Baumärkte, die Öle verkaufen) in haushaltsüblichen Mengen kostenlos abgegeben werden. Nicht in den Kehricht und niemals in die Kanalisation oder den Abfluss.",
+    },
+    # Source: INOBAT (inobat.ch) – Swiss battery recycling org; BAFU guidelines for Li-ion
+    # fire hazards. Swollen/leaking batteries require special handling distinct from normal
+    # battery return. Image classifier cannot distinguish damaged from intact batteries —
+    # this entry is reached via the text path only.
+    "damaged_battery": {
+        "allow_curbside": False,
+        "primary_channels": ["recycling_center", "special_collection"],
+        "en": "WARNING: A swollen, leaking, or damaged lithium-ion battery is a fire hazard. Do NOT put it in regular battery collection boxes or residual waste. Keep it away from flammable materials. Store it cool and dry, ideally in a non-combustible container (e.g. a box with sand). Bring it to a recycling centre (Entsorgungshof) or a hazardous-waste collection point that accepts damaged batteries — call ahead to confirm. Do not puncture or crush the battery.",
+        "de": "WARNUNG: Ein aufgeblähter, auslaufender oder beschädigter Lithium-Ionen-Akku ist brandgefährlich. NICHT in den normalen Batteriesammelbehälter im Laden und NICHT in den Hausmüll geben. Von brennbaren Materialien fernhalten. Kühl und trocken, möglichst in einem nicht brennbaren Behälter (z.B. mit Sand) lagern. Zur Abgabe an einen Entsorgungshof oder eine Sammelstelle bringen, die beschädigte Akkus / Gefahrgut annimmt – im Zweifel vorher anrufen. Akku nicht beschädigen oder durchstechen.",
+    },
+    # Sources: Migros / 20min (blaue Bons recyclingfähig, physikalischer Druck),
+    # INGEDE / VKU (Vorsicht: Farbpigmente stören Altpapier-Recycling, kleine Mengen ok).
+    # Weiss/klassisch = Kehricht. Blau/Öko = Altpapier möglich, im Zweifel Kehricht.
+    "thermal_receipt": {
+        "allow_curbside": False,
+        "primary_channels": ["residual_waste"],
+        "en": "Classic (white) till receipts are typically printed on thermal paper and must be disposed of in residual waste (Kehricht) — not in paper recycling. The thermal coating (which may contain bisphenol) interferes with the paper recycling process.",
+        "de": "Klassische (weisse) Kassenzettel bestehen meist aus Thermopapier und gehören in den Kehricht – nicht ins Altpapier. Die Thermobeschichtung (mögliche Bisphenol-Rückstände) stört das Papierrecycling.",
+    },
+    "eco_receipt": {
+        "allow_curbside": False,
+        "primary_channels": ["paper_recycling", "residual_waste"],
+        "en": "Blue eco-receipts (e.g. Migros) are phenol-free and marketed by the retailer as suitable for paper recycling (physical rather than chemical print process). Note: recycling associations (INGEDE/VKU) advise caution in large quantities as the black pigments can affect paper recycling quality; small amounts in paper recycling are unproblematic. If in doubt, dispose of in residual waste (Kehricht) as the safe option.",
+        "de": "Blaue Öko-Bons (z.B. Migros) sind phenolfrei und werden vom Händler als altpapier-recyclingfähig beworben (physikalischer statt chemischer Druckprozess). Hinweis: Recyclingverbände (INGEDE/VKU) raten bei grossen Mengen zur Vorsicht – Farbpigmente können das Papierrecycling stören; einzelne Bons im Altpapier sind unproblematisch. Im Zweifel: Kehricht als sichere Variante.",
+    },
+    # Source: Swiss Recycle (swissrecycle.ch/de/wertstoffe-wissen/wertstoffe/sonderabfall).
+    # Alle Spraydosen = Sonderabfall wegen Treibgasresten (Explosionsgefahr bei Verdichtung).
+    # Kantonale Regeln teils abweichend (leere Lachgasdosen), aber Dachverbandslinie = Sonderabfall.
+    "aerosol_can": {
+        "allow_curbside": False,
+        "primary_channels": ["special_collection", "shop_takeback"],
+        "en": "All aerosol cans (hairspray, deodorant, shaving foam, whipped cream, and other spray cans) must be disposed of as hazardous waste (Sonderabfall) — return them to a staffed collection point, a mobile hazardous-waste collection day, or a retail outlet with take-back. Do NOT put aerosol cans in the aluminium/metal collection or in residual waste: pressurised containers with propellant residues are an explosion hazard.",
+        "de": "Alle Spraydosen (Haarspray, Deo, Rasierschaum, Schlagrahm/Sprührahm und andere Druckdosen) gehören in den Sonderabfall – Abgabe bei bedienter Sammelstelle, Sonderabfall-Mobil oder Verkaufsstelle mit Rücknahme. NICHT in die Alu-/Metallsammlung und NICHT in den Kehricht: Druckbehälter mit Treibgasresten sind explosionsgefährlich.",
+    },
 }
 
 # ============================================================================
