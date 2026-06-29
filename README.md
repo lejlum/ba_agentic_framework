@@ -97,6 +97,8 @@ Best-performing classes (100% accuracy): `aluminium`, `hazardous_waste_(battery)
 
 ## Project Structure
 
+Simplified overview of the main components (not a complete file listing):
+
 ```
 ba_agentic_framework/
 ├── app.py                               # Gunicorn entry point for HF Spaces
