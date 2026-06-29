@@ -1,18 +1,8 @@
----
-title: Swiss Recycling Assistant
-emoji: ♻️
-colorFrom: blue
-colorTo: green
-sdk: docker
-app_file: app.py
-pinned: false
----
-
 # Swiss Waste Recycling Assistant
 
 Bachelor Thesis, ZHAW Life Sciences und Facility Management  
 Institut für Computational Life Sciences, Wädenswil  
-Author: Lejla Beganovic | Supervisor: Martin Schüle
+Author: Lejla Beganovic | Supervisors: Martin Schüle, Stefan Glüge
 
 ## Overview
 
@@ -90,7 +80,7 @@ white_glass, white_glass_metal
 
 Training used a two-phase procedure: Phase 1 trains the classifier head with the
 backbone frozen; Phase 2 fine-tunes the full network. Early stopping was applied
-in both phases. Total epochs trained: **[INSERT FINAL EPOCH COUNT]**.
+in both phases. Total epochs trained: **38**.
 
 Best-performing classes (100% accuracy): `aluminium`, `hazardous_waste_(battery)`,
 `organic_waste`. Weakest class: `plastic` (77.05%).
@@ -148,6 +138,6 @@ local setup.
 ## Credits
 
 Author: Lejla Beganovic  
-Supervisor: Martin Schüle  
+Supervisors: Martin Schüle, Stefan Glüge  
 ZHAW Life Sciences und Facility Management  
 Institut für Computational Life Sciences, Wädenswil
