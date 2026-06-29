@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""
-Swiss Waste Recycling Agent - Bachelor Thesis
-FIX: get_coordinates now returns coords for both ZIP codes AND city names.
-     map_lat/map_lon are passed through AgentState so the dashboard
-     never has to geocode a second time (which caused the wrong city on map).
+"""LangGraph agent for the Swiss waste recycling chatbot.
+
+Handles image classification, text-to-category lookup, geolocation, and
+GPT-4o response generation. Coordinates are resolved once in geolocation_node
+and passed through AgentState so the dashboard map never geocodes twice.
 """
 
 from pathlib import Path
@@ -54,8 +54,8 @@ TEXT_CATEGORY_MAP = {
     "juice carton": "composite_carton", "milk box": "composite_carton",
     "tetra brik": "composite_carton",
 
-    # Papiertragtasche: Swiss Recycle (papier-und-karton) → Kartonsammlung, nicht Papier.
-    # Compound keys before "paper bag" so span-overlap blocks the generic "paper" key.
+    # Papiertragtaschen (paper carrier bags): Swiss Recycle classifies these as cardboard, not paper.
+    # Compound keys are listed before "paper bag" so span-overlap detection blocks the generic "paper" key.
     "paper carrier bag": "cardboard",   "paper bag": "cardboard",
     "papiertragtasche": "cardboard",    "papiertragetasche": "cardboard",
     "papiertüte": "cardboard",          "papiersack": "cardboard",
@@ -70,10 +70,10 @@ TEXT_CATEGORY_MAP = {
     "brown glass": "brown_glass",
     "green bottle": "green_glass", "green glass": "green_glass",
 
-    # Spraydosen (Haarspray, Deo, Schlagrahm): Swiss Recycle (sonderabfall) → Sonderabfall,
-    #   NICHT Alu/Metall, NICHT Kehricht (Druckbehälter, Treibgas-Explosionsgefahr).
-    #   Hinweis: kantonale Regeln uneinheitlich; Dachverbandslinie = Sonderabfall.
-    # Compound keys before generic: "schlagrahm spraydose" before "spraydose"; "spray can" before "can".
+    # Aerosol cans (hairspray, deodorant, whipped cream): Swiss Recycle classifies these as hazardous
+    # waste (Sonderabfall), not aluminium/metal, not residual waste. Reason: pressurised containers
+    # with propellant residue are an explosion hazard when compacted. Cantonal rules vary slightly.
+    # Compound keys are listed before generic ones: "schlagrahm spraydose" before "spraydose".
     "schlagrahm spraydose": "aerosol_can",   "schlagrahm sprühdose": "aerosol_can",
     "rahm-spraydose": "aerosol_can",         "deodorant spray": "aerosol_can",
     "hair spray": "aerosol_can",             "aerosol can": "aerosol_can",
@@ -90,11 +90,11 @@ TEXT_CATEGORY_MAP = {
     "foil": "aluminium", "yogurt lid": "aluminium", "tin foil": "aluminium",
     "beverage can": "aluminium",
 
-    # --- Beschädigte/aufgeblähte Akkus → Sonderentsorgung mit Sicherheitswarnung ---
+    # Damaged/swollen batteries: require hazardous disposal with a safety warning.
     # Source: INOBAT (inobat.ch), BAFU guidelines for damaged/swollen Li-ion batteries.
-    # NOTE: image classifier maps all batteries to hazardous_waste_(battery); the text path
-    # handles the swollen/damaged subtype — visual distinction is not possible via classifier.
-    # These compound keys MUST appear before "battery"/"batterie" in dict order so the
+    # NOTE: the image classifier maps all batteries to hazardous_waste_(battery); the text path
+    # handles the swollen/damaged subtype, since visual distinction is not possible via the classifier.
+    # These compound keys must appear before "battery"/"batterie" in dict order so the
     # knowledge_base_node loop matches the more specific category first.
     "swollen battery": "damaged_battery",       "swollen lithium": "damaged_battery",
     "damaged battery": "damaged_battery",       "leaking battery": "damaged_battery",
@@ -129,11 +129,11 @@ TEXT_CATEGORY_MAP = {
     "residual waste": "residual_waste",
     "diaper": "residual_waste", "nappy": "residual_waste",
 
-    # --- Kassenzettel/Bons: differenziert nach Bon-Typ ---
-    # Sources: Migros / 20min (blaue Bons recyclingfähig, physikalischer Druck),
-    # INGEDE / VKU (Vorsicht: Farbpigmente stören Altpapier-Recycling, kleine Mengen ok).
-    # Weiss/klassisch = Kehricht. Blau/Öko = Altpapier möglich, im Zweifel Kehricht.
-    # Compound eco-receipt keys MUST appear before the generic keys so the loop matches
+    # Receipts: differentiated by type (thermal/white vs. eco/blue).
+    # Sources: Migros / 20min (blue eco-receipts recyclable, physical print process),
+    # INGEDE / VKU (caution: pigments affect paper recycling quality; small amounts are fine).
+    # White/classic receipts: residual waste. Blue/eco receipts: paper recycling possible, residual waste if in doubt.
+    # Compound eco-receipt keys must appear before generic keys so the loop matches
     # the more specific category first (e.g. "blauen kassenzettel" before "kassenzettel").
     "blue receipt": "eco_receipt",         "blauer kassenzettel": "eco_receipt",
     "blauen kassenzettel": "eco_receipt",  "blauer kassenbon": "eco_receipt",
@@ -198,9 +198,9 @@ TEXT_CATEGORY_MAP = {
     "restmüll": "residual_waste",
     "windel": "residual_waste",
 
-    # --- Leuchtmittel: Glüh- + Halogen → Kehricht ---
-    # NOTE: image classifier has no lamp classes; these categories are text-path only.
-    # Keys are long/compound — no false-positive substring risk (e.g. "glühbirne" ≠ "Birne"/fruit).
+    # Incandescent and halogen lamps: disposed of as residual waste (Kehricht).
+    # NOTE: the image classifier has no lamp classes; these categories are text-path only.
+    # Keys are long and compound, so there is no false-positive substring risk (e.g. "glühbirne" != "Birne"/fruit).
     "glühlampe": "incandescent_lamp",    "glühlampen": "incandescent_lamp",
     "glühbirne": "incandescent_lamp",    "glühbirnen": "incandescent_lamp",
     "glühbrine": "incandescent_lamp",    "glüehbire": "incandescent_lamp",
@@ -209,8 +209,8 @@ TEXT_CATEGORY_MAP = {
     "light bulb": "incandescent_lamp",   "incandescent": "incandescent_lamp",
     "halogen lamp": "incandescent_lamp", "halogen bulb": "incandescent_lamp",
 
-    # --- Leuchtmittel: LED / Energiespar / Leuchtstoff → Sammelstelle (VREG) ---
-    # Longer/compound keys listed before shorter substrings so the first-match loop hits
+    # LED, CFL, and fluorescent lamps: returned to SENS collection points under VREG.
+    # Longer/compound keys are listed before shorter substrings so the first-match loop hits
     # the more specific term first (e.g. "energiesparlampe" before "sparlampe").
     "led lampe": "lamp_special_disposal",              "led-lampe": "lamp_special_disposal",
     "ledlampe": "lamp_special_disposal",               "led birne": "lamp_special_disposal",
@@ -221,17 +221,16 @@ TEXT_CATEGORY_MAP = {
     "led lamp": "lamp_special_disposal",               "energy saving lamp": "lamp_special_disposal",
     "fluorescent tube": "lamp_special_disposal",       "fluorescent": "lamp_special_disposal",
 
-    # --- Altöl / Öl → getrennte Altölsammlung ---
-    # Source: Swiss Recycle (swissrecycle.ch/de/wertstoffe-wissen/wertstoffe/oel), ergänzend BAFU.
-    # Altöl = getrennte Sammlung (NICHT Sonderabfall; Sonderabfall = Benzin/Sprit/Farben).
-    # Motorenöl: Sammelstelle + Garagen/Verkaufsstellen. Nicht in Kehricht/Kanalisation.
+    # Waste oil and cooking oil: separate waste-oil collection, not classified as hazardous waste.
+    # Source: Swiss Recycle (swissrecycle.ch/de/wertstoffe-wissen/wertstoffe/oel), supplemented by BAFU.
+    # Hazardous waste covers fuels, paints, solvents. Motor oil: collection points and garages. Never drain or residual waste.
     "motorenöl": "waste_oil",   "motoröl": "waste_oil",   "altöl": "waste_oil",
     "getriebeöl": "waste_oil",  "schmieröl": "waste_oil",
     "frittieröl": "waste_oil",  "speiseöl": "waste_oil",  "bratöl": "waste_oil",
-    "öl": "waste_oil",          # short key — safe via word-boundary regex in knowledge_base_node
+    "öl": "waste_oil",          # short key: safe via word-boundary regex in knowledge_base_node
     "motor oil": "waste_oil",   "engine oil": "waste_oil",  "used oil": "waste_oil",
     "cooking oil": "waste_oil", "frying oil": "waste_oil",  "waste oil": "waste_oil",
-    "oil": "waste_oil",         # short key — safe via word-boundary regex (won't match "foil", "coil")
+    "oil": "waste_oil",         # short key: safe via word-boundary regex (won't match "foil", "coil")
 }
 
 LOCATION_KEYWORDS = [
@@ -250,6 +249,7 @@ LOCATION_KEYWORDS = [
 # ===========================================================================
 
 class AgentState(TypedDict):
+    """Shared state passed between all LangGraph nodes in the agent graph."""
     user_message: str
     image_path: Optional[str]
     city: Optional[str]
@@ -270,16 +270,12 @@ class AgentState(TypedDict):
 
 # ===========================================================================
 # GEOLOCATION
-# FIX: accepts both ZIP codes and city/municipality names.
-#      Returns (lat, lon, municipality) so the dashboard can use these
-#      coordinates directly – no second geocoding in make_map_card.
+# Resolves Swiss city names and ZIP codes to coordinates via geo.admin.ch.
+# Coordinates are stored in AgentState so the dashboard map never geocodes twice.
 # ===========================================================================
 
 def get_coordinates(city: str):
-    """
-    Resolves a Swiss city/town name to (lat, lon, municipality) via geo.admin.ch.
-    City names match the gg25 municipality layer reliably.
-    """
+    """Resolve a Swiss city/town name or ZIP code to (lat, lon, municipality) via geo.admin.ch."""
     city = (city or "").strip()
     if not city:
         return None
@@ -318,7 +314,7 @@ def get_coordinates(city: str):
                 print(f"[DEBUG] geo.admin.ch: {search_label} → coords ({lat:.4f}, {lon:.4f}) outside CH, rejecting")
                 return None
 
-            # label is like "<b>9000 St. Gallen</b>" — strip HTML then leading ZIP
+            # label is like "<b>9000 St. Gallen</b>": strip HTML then leading ZIP
             raw_label = attrs.get("label", search_text)
             clean = re.sub(r"<[^>]+>", "", raw_label).strip()
             municipality = re.sub(r"^\d{4}\s+", "", clean).strip() or city
@@ -332,6 +328,7 @@ def get_coordinates(city: str):
 
 
 def get_osm_collection_points(lat: float, lon: float, radius: int = 2000):
+    """Query the Overpass API for recycling and waste disposal nodes within the given radius (metres)."""
     query = f"""
     [out:json][timeout:15];
     (
@@ -357,6 +354,7 @@ def get_osm_collection_points(lat: float, lon: float, radius: int = 2000):
 
 
 def format_collection_points(elements: list, municipality: str, lang: str) -> str:
+    """Format raw OSM collection point elements into a readable text summary in the given language."""
     glass, pet, metal, centres = [], [], [], []
 
     for el in elements:
@@ -405,6 +403,7 @@ def format_collection_points(elements: list, municipality: str, lang: str) -> st
 # ===========================================================================
 
 def perception_node(state: AgentState) -> AgentState:
+    """Classify input as 'image', 'location', or 'text' based on the uploaded file and message content."""
     msg = state["user_message"].lower()
     image_path = state.get("image_path")
 
@@ -420,6 +419,7 @@ def perception_node(state: AgentState) -> AgentState:
 
 
 def classifier_node(state: AgentState) -> AgentState:
+    """Run the image classifier and update state with the result and scan history."""
     print(f"[DEBUG] classifying: {state['image_path']}")
     result = classifier.classify(state["image_path"])
 
@@ -436,12 +436,13 @@ def classifier_node(state: AgentState) -> AgentState:
 _MAX_CATEGORIES = 4  # cap multi-item context to avoid overwhelming the LLM
 
 def knowledge_base_node(state: AgentState) -> AgentState:
+    """Look up disposal guidelines for the classified category or matched text terms."""
     lang = state.get("language", "en")
     classification = state.get("classification") or {}
     category_from_classifier = classification.get("category", "")
 
     if category_from_classifier:
-        # Image path: single category from classifier — no multi-match needed
+        # Image path: single category from classifier, no multi-match needed.
         guide = RECYCLING_GUIDE.get(category_from_classifier, {})
         gl = guide.get(lang, guide.get("en", "No guidelines found."))
         guidelines_list = [{"category": category_from_classifier, "guideline": gl}]
@@ -480,10 +481,7 @@ def knowledge_base_node(state: AgentState) -> AgentState:
 
 
 def geolocation_node(state: AgentState) -> AgentState:
-    """
-    FIX: stores resolved lat/lon into state so the dashboard map_card
-    can use them directly without geocoding again.
-    """
+    """Geocode the city from state, fetch nearby OSM collection points, and store results and coordinates in state."""
     city = (state.get("city") or "").strip()
     lang = state.get("language", "en")
 
@@ -553,6 +551,7 @@ def _strip_map_references(text: str) -> str:
 
 
 def response_node(state: AgentState) -> AgentState:
+    """Build the LLM prompt from context and guidelines, call GPT-4o, and store the response in state."""
     lang = state.get("language", "en")
     classification = state.get("classification")
     guidelines = state.get("guidelines", "")
@@ -560,8 +559,8 @@ def response_node(state: AgentState) -> AgentState:
     conv_history = state.get("conversation_history", [])
     has_map = bool(collection_points)
 
-    # input_type == "location" → new map generated NOW → appears BELOW
-    # input_type != "location" → follow-up → map was in previous message → ABOVE
+    # For a new location query, the map appears below the response in the chat.
+    # For a follow-up text query, any map was already shown above in a previous message.
     is_new_location_query = state.get("input_type") == "location"
 
     if lang == "de":
@@ -661,6 +660,7 @@ Rules:
 
 
 def clarification_node(state: AgentState) -> AgentState:
+    """Return a clarifying question when the image classification confidence is too low."""
     lang = state.get("language", "en")
     classification = state.get("classification", {})
     category = classification.get("category", "")
@@ -697,17 +697,21 @@ def clarification_node(state: AgentState) -> AgentState:
 # ===========================================================================
 
 def route_after_perception(state: AgentState):
+    """Route to classifier, geolocation, or knowledge_base based on the detected input type."""
     if state["input_type"] == "image":    return "classifier"
     if state["input_type"] == "location": return "geolocation"
     return "knowledge_base"
 
 def route_after_classifier(state: AgentState):
+    """Route to clarification if confidence is low, otherwise to knowledge_base."""
     return "clarification" if state.get("needs_clarification") else "knowledge_base"
 
 def route_after_knowledge_base(state: AgentState):
+    """Always continue to the response node."""
     return "response"
 
 def route_after_geolocation(state: AgentState):
+    """End early if geolocation failed with a pre-set response, otherwise continue to response node."""
     if state.get("final_response"):
         return END
     return "response"
@@ -718,6 +722,7 @@ def route_after_geolocation(state: AgentState):
 # ===========================================================================
 
 def build_agent():
+    """Build and compile the LangGraph agent with all nodes and conditional routing."""
     memory = MemorySaver()
     graph = StateGraph(AgentState)
 
@@ -745,6 +750,7 @@ def build_agent():
 # ===========================================================================
 
 def main():
+    """Run the interactive command-line interface for testing the agent locally."""
     print("=" * 55)
     print("Swiss Waste Recycling Agent - Bachelor Thesis")
     print("=" * 55)

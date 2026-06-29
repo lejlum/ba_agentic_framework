@@ -1,18 +1,18 @@
-"""
-Central configuration for all project paths
+"""Central configuration for all project paths and constants used by notebooks and scripts.
+Keeping paths here means they only need to be updated in one place if the directory structure changes.
 """
 from pathlib import Path
 
 # ============================================================================
 # PROJECT ROOTS
 # ============================================================================
-# Old Project Root
+# Old project root (kept for reference, no longer active)
 #PROJECT_ROOT = Path(r"C:\ZHAW\HS25\PA2\waste_recycling_chatbot_pa2")
 
-# Code/notebooks root - this workspace (ba_agentic_framework)
+# Code and notebooks root: this workspace (ba_agentic_framework)
 PROJECT_ROOT = Path(r"C:\Users\Lejlum\Documents\agentic_framework\ba_agentic_framework\waste_recycling_chatbot_pa2")
 
-# Data/models root - large files stay here, not duplicated into this workspace
+# Data and models root: large files live here, separate from the code workspace to avoid duplication.
 DATA_PROJECT_ROOT = Path(r"C:\Users\Lejlum\Documents\PA2_Recycling_Chatbot\waste_recycling_chatbot_pa2")
 
 # ============================================================================
@@ -20,7 +20,7 @@ DATA_PROJECT_ROOT = Path(r"C:\Users\Lejlum\Documents\PA2_Recycling_Chatbot\waste
 # ============================================================================
 
 # Archive (Backup of original files)
-ARCHIVE_ROOT = DATA_PROJECT_ROOT.parent / "_archive_original"  # Eine Ebene höher
+ARCHIVE_ROOT = DATA_PROJECT_ROOT.parent / "_archive_original"  # one level above DATA_PROJECT_ROOT
 REALWASTE_ORIGINAL = ARCHIVE_ROOT / "realwaste-main" / "RealWaste"
 ECOVISION_ORIGINAL = ARCHIVE_ROOT / "ecovision_mobilenetv3"
 
@@ -38,13 +38,13 @@ COCO_DATA = DATA_ROOT / "coco_data"
 COCO_IMAGES_TRAIN = COCO_DATA / "images" / "train2017"
 COCO_IMAGES_VAL = COCO_DATA / "images" / "val2017"
 
-# Output für neu organisiertes Dataset
+# Output directory for the reorganized dataset
 PROCESSED_NEW = DATA_ROOT / "processed_new" / "organized_dataset"
 
 # Models
 MODEL_ROOT = DATA_PROJECT_ROOT / "models"
 BASELINE_MODEL = DATA_PROJECT_ROOT / "_archive_original" / "ecovision_mobilenetv3" / "pytorch_model.bin"  # Original (READ-ONLY)
-FINETUNED_MODEL = MODEL_ROOT / "baseline" / "finetuned_model.pth"  # Ihr trainiertes Model
+FINETUNED_MODEL = MODEL_ROOT / "baseline" / "finetuned_model.pth"  # trained classifier from the training notebook
 CHECKPOINT_DIR = MODEL_ROOT / "checkpoints"
 FINAL_MODEL_DIR = MODEL_ROOT / "baseline"
 
@@ -61,12 +61,13 @@ NOTEBOOKS_DIR = PROJECT_ROOT / "notebooks"
 # CONSTANTS
 # ============================================================================
 
+# Original class labels from the EcoVision/MobileNetV3 baseline model.
 ECOVISION_CLASSES = [
     'battery', 'biological', 'cardboard', 'clothes', 'glass',
     'metal', 'paper', 'plastic', 'shoes', 'trash'
 ]
 
-# Training hyperparameters (optional, can be used later)
+# Default training hyperparameters used across notebooks for consistency.
 TRAINING_CONFIG = {
     'batch_size': 32,
     'learning_rate': 0.001,
@@ -82,42 +83,41 @@ TRAINING_CONFIG = {
 # ============================================================================
 
 def check_paths():
-    """Check if all important paths exist"""
+    """Print whether each key path exists, useful for verifying the environment before running notebooks."""
     print("Checking paths...")
     print(f"\nProject Root: {PROJECT_ROOT}")
     print(f"Exists: {'YES' if PROJECT_ROOT.exists() else 'NO'}")
-    
+
     print(f"\nRealWaste Original: {REALWASTE_ORIGINAL}")
     print(f"Exists: {'YES' if REALWASTE_ORIGINAL.exists() else 'NO'}")
-    
+
     print(f"\nProcessed Data: {PROCESSED_DATA}")
     print(f"Exists: {'YES' if PROCESSED_DATA.exists() else 'NO'}")
-    
+
     print(f"\nModels: {MODEL_ROOT}")
     print(f"Exists: {'YES' if MODEL_ROOT.exists() else 'NO'}")
-    
+
     print(f"\nOutputs: {OUTPUT_ROOT}")
     print(f"Exists: {'YES' if OUTPUT_ROOT.exists() else 'NO'}")
 
 
 def create_directories():
-    """Create all necessary directories"""
+    """Create all output and model directories if they do not exist yet."""
     dirs_to_create = [
         DATA_ROOT, RAW_DATA, PROCESSED_DATA,
         MODEL_ROOT, CHECKPOINT_DIR, FINAL_MODEL_DIR,
         OUTPUT_ROOT, FIGURES_DIR, LOGS_DIR, REPORTS_DIR,
         NOTEBOOKS_DIR
     ]
-    
+
     print("Creating directories...")
     for dir_path in dirs_to_create:
         dir_path.mkdir(parents=True, exist_ok=True)
         print(f"Created: {dir_path}")
-    
+
     print("\nAll directories created successfully!")
 
 
-# Auto-check on import (optional)
+# Run path check when this file is executed directly.
 if __name__ == "__main__":
     check_paths()
-

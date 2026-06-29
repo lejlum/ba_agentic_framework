@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""
-Swiss Recycling Assistant - Dashboard (Bachelor Thesis)
-=======================================================
+"""Dash dashboard and Flask server for the Swiss waste recycling chatbot.
 
-Changes applied:
-  1. Google Maps link directly in Leaflet popup (removed map-click callbacks)
-  2. User message shown immediately with animated thinking bubble
-  3. City/Ort name input in addition to ZIP
-  4. location_result: only map card shown — no duplicate text bubble.
-     The Google Maps link (+ address + opening hours) lives in each popup.
+Implements the chat UI, image upload and classification flow, Leaflet map
+integration via an embedded iframe, and all Dash callbacks. Served as a
+Gunicorn app via app.py.
 """
 
 import base64
@@ -51,7 +46,7 @@ agent = build_agent()
 
 
 # ---------------------------------------------------------------------------
-# CATEGORY LABELS — human-readable names for RECYCLING_GUIDE keys (de + en).
+# CATEGORY LABELS: human-readable names for RECYCLING_GUIDE keys (de + en).
 # Fallback for unknown keys: key.replace('_', ' ').title()
 # ---------------------------------------------------------------------------
 CATEGORY_LABELS: dict = {
@@ -86,13 +81,13 @@ CATEGORY_LABELS: dict = {
 # MAP COMPONENT CACHE
 # ---------------------------------------------------------------------------
 # Caches the map_widget component keyed by message id (mid, a uuid4 hex).
-# Goal: return the *same* Python object on re-renders so Dash serialises
-# byte-for-byte identical JSON → React reconciliation has no reason to
-# unmount/remount the iframe.  The key= props on the widget div and the
-# Iframe are the actual mechanism that helps React avoid re-mounting.
+# Goal: return the same Python object on re-renders so Dash serialises
+# byte-for-byte identical JSON. React reconciliation then has no reason to
+# unmount and remount the iframe. The key= props on the widget div and the
+# iframe are the actual mechanism that steers React away from re-mounting.
 # Safety: mids are uuid4 hex strings generated once at message creation;
-# new-chat sessions get new mids, so no stale/wrong-location data ever
-# surfaces from the cache.  Capped at _MAP_CACHE_MAX entries to bound RAM.
+# new-chat sessions get new mids, so no stale or wrong-location data ever
+# surfaces from the cache. Capped at _MAP_CACHE_MAX entries to bound RAM.
 _MAP_COMPONENT_CACHE: dict = {}
 _MAP_CACHE_MAX = 100
 
@@ -100,6 +95,7 @@ _MAP_CACHE_MAX = 100
 # UI TEXT
 # ---------------------------------------------------------------------------
 def get_texts(language: str) -> Dict[str, str]:
+    """Return UI text strings for the given language ('en' or 'de')."""
     if language == "de":
         return {
             "title": "Swiss Recycling Assistant",
@@ -196,7 +192,7 @@ server = app.server
 
 
 def build_map_html(city, lat, lon, language):
-    """Build standalone map HTML served via Flask route."""
+    """Build standalone Leaflet map HTML for the given city and coordinates."""
     home_label   = "Ihr Standort"    if language == "de" else "Your location"
     lbl_address  = "Adresse"         if language == "de" else "Address"
     lbl_hours    = "Oeffnungszeiten" if language == "de" else "Opening hours"
@@ -312,6 +308,7 @@ fetch('https://overpass-api.de/api/interpreter', {{
 
 @server.route('/map')
 def serve_map():
+    """Flask route that serves the Leaflet map HTML for a given city and coordinates."""
     city     = flask_request.args.get('city', '')
     lat_str  = flask_request.args.get('lat', '')
     lon_str  = flask_request.args.get('lon', '')
@@ -491,7 +488,7 @@ CHAT_ROW = {"display": "flex", "alignItems": "flex-end", "gap": "12px", "marginB
 
 
 def build_map_html_str(city: str, language: str, lat: float = None, lon: float = None) -> str:
-    """Build Leaflet map HTML string — call once, cache the result in the message dict."""
+    """Build the Leaflet map HTML string for the given city and coordinates."""
     location_label = city or "CH"
     query_str = (city or "Schweiz").replace("'", "\\'")
 
@@ -509,8 +506,8 @@ def build_map_html_str(city: str, language: str, lat: float = None, lon: float =
     btn_supermarkt = "Laden"          if language == "de" else "Store"
     lbl_gmaps     = "In Google Maps \u00f6ffnen" if language == "de" else "Open in Google Maps"
 
-    # When the agent already resolved coordinates, bake them into JS directly \u2014
-    # no client-side Nominatim call needed, so the map centers instantly.
+    # When the agent already resolved coordinates, bake them into the JS init block.
+    # This skips the client-side Nominatim geocoding call so the map centers instantly.
     init_lat  = lat if lat is not None else 46.9481
     init_lon  = lon if lon is not None else 7.4474
     init_zoom = 15  if lat is not None else 8
@@ -757,10 +754,12 @@ app.layout = html.Div([
 
 @app.callback(Output("city-store", "data"), Input("city-input", "value"))
 def save_city(value):
+    """Persist city input to a store so other callbacks can read it without coupling to the input component."""
     return value or ""
 
 @app.callback(Output("language-store", "data"), Input("language-dropdown", "value"))
 def update_language(lang):
+    """Persist language selection to a store."""
     return lang or "en"
 
 @app.callback(
@@ -772,6 +771,7 @@ def update_language(lang):
     Input("language-store", "data"),
 )
 def update_labels(language):
+    """Update all language-dependent sidebar labels and placeholders when the language changes."""
     texts = get_texts(language)
     return (texts["language_label"], texts["city_label"],
             texts["new_chat"], texts["chat_history_label"], texts["chat_input"],
@@ -785,6 +785,7 @@ def update_labels(language):
     prevent_initial_call=True,
 )
 def toggle_sidebar(n_clicks, collapsed):
+    """Toggle sidebar CSS class between collapsed and expanded."""
     new_collapsed = not collapsed
     sidebar_class = "collapsed" if new_collapsed else "open"
     main_class = "collapsed" if new_collapsed else ""
@@ -793,6 +794,7 @@ def toggle_sidebar(n_clicks, collapsed):
 @app.callback(Output("sidebar-collapsed-store", "data"), Input("sidebar-toggle", "n_clicks"),
               State("sidebar-collapsed-store", "data"), prevent_initial_call=True)
 def save_collapsed(n_clicks, collapsed):
+    """Persist sidebar collapsed state to a store."""
     return not collapsed
 
 @app.callback(
@@ -800,6 +802,7 @@ def save_collapsed(n_clicks, collapsed):
     [Input("sessions-store", "data"), Input("active-session-store", "data"), Input("language-store", "data")],
 )
 def update_session_list(sessions, active_session, language):
+    """Render the sidebar session list, highlighting the active session."""
     texts = get_texts(language)
     sessions = sessions or {}
     if not sessions:
@@ -833,6 +836,7 @@ def update_session_list(sessions, active_session, language):
     [State("city-store", "data")],
 )
 def render_chat(language, sessions, active_session, city):
+    """Re-render the full chat content whenever sessions or the active session changes."""
     texts = get_texts(language)
     messages = (sessions or {}).get(active_session, []) if active_session else []
     if not messages:
@@ -845,7 +849,7 @@ def render_chat(language, sessions, active_session, city):
         ], style={"display": "flex", "alignItems": "center", "justifyContent": "center", "padding": "60px 24px", "minHeight": "65vh"})
 
     # idx gives React a stable key per message so it reuses DOM nodes instead of
-    # recreating them — critical for keeping the map iframe from reloading.
+    # recreating them, which is critical for keeping the map iframe from reloading.
     def make_msg(msg, idx):
         k = msg.get("mid") or f"msg-{idx}"
         if msg.get("role") == "user":
@@ -895,8 +899,8 @@ def render_chat(language, sessions, active_session, city):
                         f"for aluminium, glass, cardboard, PET, hazardous waste, and more."
                     )
                 if mid not in _MAP_COMPONENT_CACHE:
-                    # Build a stable URL — browser never reloads an iframe whose src
-                    # stays identical, unlike srcDoc which re-evaluates aggressively.
+                    # Use a URL-based src so the browser never reloads the iframe
+                    # when its src stays identical. srcDoc re-evaluates aggressively.
                     lat_part = f"&lat={lat_used}" if lat_used is not None else ""
                     lon_part = f"&lon={lon_used}" if lon_used is not None else ""
                     map_src = f"/map?city={url_quote(city_used)}&lang={lang_used}{lat_part}{lon_part}"
@@ -944,6 +948,7 @@ def render_chat(language, sessions, active_session, city):
     prevent_initial_call=True,
 )
 def new_chat(n_clicks, sessions):
+    """Create a new empty chat session and make it active."""
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
     sessions = sessions or {}
@@ -957,6 +962,7 @@ def new_chat(n_clicks, sessions):
     prevent_initial_call=True,
 )
 def clear_inputs_on_new_chat(new_session_id):
+    """Clear the city input when a new chat starts."""
     if not new_session_id:
         raise dash.exceptions.PreventUpdate
     return ""
@@ -967,6 +973,7 @@ def clear_inputs_on_new_chat(new_session_id):
     prevent_initial_call=True,
 )
 def select_session(n_clicks):
+    """Switch the active session when a history item is clicked."""
     if not ctx.triggered_id or not any(n_clicks):
         raise dash.exceptions.PreventUpdate
     return ctx.triggered_id["index"]
@@ -978,6 +985,7 @@ def select_session(n_clicks):
     prevent_initial_call=True,
 )
 def delete_session(n_clicks, sessions, active_session):
+    """Delete a session and fall back to the first remaining session."""
     if not ctx.triggered_id or not any(n for n in n_clicks if n):
         raise dash.exceptions.PreventUpdate
     sid = ctx.triggered_id["index"]
@@ -989,7 +997,7 @@ def delete_session(n_clicks, sessions, active_session):
 
 
 # ---------------------------------------------------------------------------
-# INFO MODAL — open/close + language-aware body render
+# INFO MODAL: open/close and language-aware body rendering
 # ---------------------------------------------------------------------------
 @app.callback(
     Output("info-modal", "is_open"),
@@ -998,6 +1006,7 @@ def delete_session(n_clicks, sessions, active_session):
     prevent_initial_call=True,
 )
 def toggle_info_modal(_n_open, _n_close, is_open):
+    """Open or close the info modal on button clicks."""
     return not is_open
 
 
@@ -1009,11 +1018,12 @@ def toggle_info_modal(_n_open, _n_close, is_open):
     prevent_initial_call=True,
 )
 def render_info_modal(language, is_open):
+    """Populate info modal content in the current language when the modal opens."""
     if not is_open:
         raise dash.exceptions.PreventUpdate
     texts = get_texts(language)
 
-    # Block 1 — Features
+    # Block 1: what the assistant can do
     block1 = html.Div([
         html.H6(texts["info_block1_title"], style={"fontWeight": "600", "marginBottom": "8px"}),
         html.Ul(
@@ -1022,7 +1032,7 @@ def render_info_modal(language, is_open):
         ),
     ], style={"marginBottom": "20px"})
 
-    # Block 2 — Classifier classes (Config.WASTE_CATEGORIES, exactly what the model was trained on)
+    # Block 2: classifier categories from Config.WASTE_CATEGORIES (the model's training labels)
     img_classes = Config.WASTE_CATEGORIES
     cat_labels = []
     for key in img_classes:
@@ -1061,7 +1071,7 @@ def render_info_modal(language, is_open):
                   "borderRadius": "6px", "border": "1px solid #e2e8f0"}),
     ], style={"marginBottom": "20px"})
 
-    # Block 3 — Limits
+    # Block 3: limitations and notes
     block3 = html.Div([
         html.H6(texts["info_block3_title"], style={"fontWeight": "600", "marginBottom": "8px"}),
         html.Ul(
@@ -1081,7 +1091,7 @@ def render_info_modal(language, is_open):
 
 
 # ---------------------------------------------------------------------------
-# Two-step send — Step 1: show user message + thinking bubble
+# Two-step send: Step 1 shows the user message and thinking bubble immediately
 # ---------------------------------------------------------------------------
 @app.callback(
     [Output("sessions-store", "data", allow_duplicate=True),
@@ -1122,7 +1132,7 @@ def send_message_step1(n_clicks, n_submit, user_text, sessions, active_session, 
     return sessions, active_session, pending, ""
 
 
-# Two-step send — Step 2: call agent, replace thinking bubble
+# Two-step send: Step 2 calls the agent and replaces the thinking bubble
 @app.callback(
     [Output("sessions-store", "data", allow_duplicate=True),
      Output("agent-history-store", "data", allow_duplicate=True)],
@@ -1246,12 +1256,12 @@ def handle_image_step2(pending, language, sessions, active_session, city, agent_
         with open(tmp_path, "wb") as f:
             f.write(img_bytes)
 
-        # Normalize: handle HEIC/WEBP/PNG/EXIF rotation → plain RGB JPEG
+        # Normalize to JPEG: handle HEIC/WEBP/PNG and fix EXIF rotation before classifying.
         # pillow-heif (registered at import) lets PIL open HEIC transparently.
         normalized_path = os.path.join(tempfile.gettempdir(), f"norm_{uuid.uuid4().hex}.jpg")
         with Image.open(tmp_path) as img:
             img = ImageOps.exif_transpose(img)  # fix phone rotation metadata
-            img = img.convert("RGB")             # HEIC/WEBP/PNG → JPEG-safe
+            img = img.convert("RGB")             # strip alpha channel and HEIC/WEBP encoding
             img.save(normalized_path, "JPEG", quality=90)
 
         session_state = agent_history.get(active_session, {"scan_history": [], "conv_history": []})
@@ -1301,6 +1311,7 @@ def handle_image_step2(pending, language, sessions, active_session, city, agent_
 # MAIN
 # ---------------------------------------------------------------------------
 def open_browser():
+    """Open the app in the default browser."""
     webbrowser.open("http://127.0.0.1:8050/")
 
 if __name__ == "__main__":

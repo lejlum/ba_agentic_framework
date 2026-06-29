@@ -1,25 +1,15 @@
 #!/usr/bin/env python3
-"""
-Swiss Waste Recycling Chatbot - Swiss Recycle Strict Compliance Version
-========================================================================
-A Swiss-specific chatbot strictly aligned with Swiss Recycle guidelines.
-NEVER suggests disposal methods that don't exist in Swiss practice.
+"""Knowledge base and classifier for the Swiss waste recycling chatbot.
 
-Authoritative Source: https://swissrecycle.ch/de/wertstoffe-wissen/recycling-in-der-schweiz
+Provides the RECYCLING_GUIDE disposal data (17 waste categories, aligned with
+Swiss Recycle guidelines) and the WasteClassifier image model (MobileNetV3).
 
-Features:
-- Image classification for 17 waste categories
-- Ollama integration for conversational AI
-- Strict Swiss Recycle-aligned disposal guidance
-- Category-controlled disposal channel logic (no generic curbside mentions)
-- Bilingual support (EN/DE)
+Authoritative source: https://swissrecycle.ch/de/wertstoffe-wissen/recycling-in-der-schweiz
 """
 
 import logging
-import json
-import requests
 from pathlib import Path
-from typing import Dict, Optional, List, Set
+from typing import Dict
 import torch
 import torch.nn as nn
 from PIL import Image
@@ -32,13 +22,8 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # ============================================================================
 
-# Central configuration for waste recycling chatbot
 class Config:
     """Configuration for Swiss waste recycling chatbot"""
-    # Ollama API running locally on standard port
-    OLLAMA_URL = "http://localhost:11434" 
-    DEFAULT_MODEL = "qwen2.5-coder:7b-instruct"
-    
     # Complete waste categories (17 categories from dataset)
     WASTE_CATEGORIES = [
         'aluminium',
@@ -61,10 +46,10 @@ class Config:
     ]
 
 # ============================================================================
-# SWISS RECYCLING GUIDELINES - SWISS RECYCLE ALIGNED
+# SWISS RECYCLING GUIDELINES, SWISS RECYCLE ALIGNED
 # ============================================================================
 # Based on Swiss Recycle: https://swissrecycle.ch/de/wertstoffe-wissen/recycling-in-der-schweiz
-# Each category now has explicit flags controlling which disposal channels to mention
+# Each category has explicit flags controlling which disposal channels to mention.
 
 RECYCLING_GUIDE = {
     "pet": {
@@ -160,7 +145,7 @@ RECYCLING_GUIDE = {
         "en": "Batteries must be returned to any retail store that sells batteries—this service is provided free of charge and is legally required for all retailers. All battery types are accepted. Other hazardous waste (chemicals, paint, solvents, electronic devices): bring to recycling centers or special municipal collection days. Small electronic devices are often accepted at retail stores.",
         "de": "Batterien müssen in jedem Verkaufsgeschäft zurückgegeben werden, das Batterien verkauft—dieser Service ist kostenlos und für alle Händler gesetzlich vorgeschrieben. Alle Batterietypen werden angenommen. Anderer Sonderabfall (Chemikalien, Farben, Lösungsmittel, elektronische Geräte): zu Recyclingzentren oder speziellen kommunalen Sammeltagen bringen. Kleinelektronikgeräte werden oft in Verkaufsgeschäften angenommen."
     },
-        "non_waste": {
+    "non_waste": {
         "allow_curbside": False,
         "primary_channels": ["not_applicable"],
         "en": "The image does not appear to show a waste item. Please upload a clear photo of the item you want to dispose of, ideally with the object centered and visible.",
@@ -173,8 +158,8 @@ RECYCLING_GUIDE = {
         "de": "Kehricht ist nur für nicht recycelbare Gegenstände vorgesehen. Gegenstände in offiziellen kommunalen Abfallsäcken (kostenpflichtig) oder autorisierten Containern entsorgen. Sammeltage variieren je nach Gemeinde—konsultieren Sie Ihren lokalen Abfallkalender. Angenommene Gegenstände umfassen verschmutzte Gegenstände, nicht recycelbare Kunststoffe, zerbrochene Keramik, Asche und Hygieneprodukte. Gebühren werden über das Sack-/Stickersystem erhoben (Verursacherprinzip)."
     },
     # Source: Swiss Recycle (swissrecycle.ch/wertstoffe/leuchtmittel),
-    # SENS eRecycling (übernahm SLRS 2021), Rechtsgrundlage VREG.
-    # Glüh-/Halogenlampen: Kehricht. LED/Energiespar/Leuchtstoff: Rücknahme Handel/SENS.
+    # SENS eRecycling (took over SLRS in 2021), legal basis: VREG.
+    # Incandescent/halogen: residual waste. LED/CFL/fluorescent: return to retailers or SENS.
     "incandescent_lamp": {
         "allow_curbside": True,
         "primary_channels": ["curbside_paid"],
@@ -187,28 +172,28 @@ RECYCLING_GUIDE = {
         "en": "LED lamps, energy-saving lamps (compact fluorescent lamps), and fluorescent tubes must NOT be disposed of in residual waste. Return them free of charge to any retailer or a SENS eRecycling collection point (mandatory take-back under VREG). Energy-saving lamps contain mercury — do not break them. Do not place in glass containers.",
         "de": "LED-Lampen, Energiesparlampen (Kompaktleuchtstofflampen) und Leuchtstoffröhren dürfen NICHT in den Hausmüll. Kostenlose Rückgabe im Verkaufsgeschäft oder bei einer SENS-eRecycling-Sammelstelle (gesetzliche Rücknahmepflicht nach VREG). Energiesparlampen enthalten Quecksilber – nicht zerbrechen lassen. Nicht in den Glascontainer.",
     },
-    # Source: Swiss Recycle (swissrecycle.ch/de/wertstoffe-wissen/wertstoffe/oel), ergänzend BAFU.
-    # Altöl = getrennte Sammlung (NICHT Sonderabfall; Sonderabfall = Benzin/Sprit/Farben).
-    # Motorenöl: Sammelstelle + Garagen/Verkaufsstellen. Nicht in Kehricht/Kanalisation.
+    # Source: Swiss Recycle (swissrecycle.ch/de/wertstoffe-wissen/wertstoffe/oel), supplemented by BAFU.
+    # Waste oil uses separate collection, not classified as hazardous waste (hazardous = fuels/paints/solvents).
+    # Motor oil: collection points and garages/retailers. Never in residual waste or drains.
     "waste_oil": {
         "allow_curbside": False,
         "primary_channels": ["recycling_center", "shop_takeback"],
         "en": "Used motor oil, gearbox oil, lubricating oil, and cooking/frying oil must be brought to designated waste-oil collection points (recycling centres / Entsorgungshof). Motor oil can additionally be returned free of charge at garages and retail outlets that sell oil (e.g. hardware stores), in typical household quantities. Do not dispose of in residual waste and never pour down the drain.",
         "de": "Altöl (Motoren-, Getriebe-, Schmieröl) sowie Speise- und Frittieröl gehören in die Altölsammlung an Sammelstellen und Entsorgungshöfen. Motorenöl kann zusätzlich bei Garagen und Verkaufsstellen (z.B. Fach-/Baumärkte, die Öle verkaufen) in haushaltsüblichen Mengen kostenlos abgegeben werden. Nicht in den Kehricht und niemals in die Kanalisation oder den Abfluss.",
     },
-    # Source: INOBAT (inobat.ch) – Swiss battery recycling org; BAFU guidelines for Li-ion
+    # Source: INOBAT (inobat.ch), Swiss battery recycling organisation; BAFU guidelines for Li-ion
     # fire hazards. Swollen/leaking batteries require special handling distinct from normal
-    # battery return. Image classifier cannot distinguish damaged from intact batteries —
-    # this entry is reached via the text path only.
+    # battery return. The image classifier cannot distinguish damaged from intact batteries,
+    # so this entry is reached via the text path only.
     "damaged_battery": {
         "allow_curbside": False,
         "primary_channels": ["recycling_center", "special_collection"],
         "en": "WARNING: A swollen, leaking, or damaged lithium-ion battery is a fire hazard. Do NOT put it in regular battery collection boxes or residual waste. Keep it away from flammable materials. Store it cool and dry, ideally in a non-combustible container (e.g. a box with sand). Bring it to a recycling centre (Entsorgungshof) or a hazardous-waste collection point that accepts damaged batteries — call ahead to confirm. Do not puncture or crush the battery.",
         "de": "WARNUNG: Ein aufgeblähter, auslaufender oder beschädigter Lithium-Ionen-Akku ist brandgefährlich. NICHT in den normalen Batteriesammelbehälter im Laden und NICHT in den Hausmüll geben. Von brennbaren Materialien fernhalten. Kühl und trocken, möglichst in einem nicht brennbaren Behälter (z.B. mit Sand) lagern. Zur Abgabe an einen Entsorgungshof oder eine Sammelstelle bringen, die beschädigte Akkus / Gefahrgut annimmt – im Zweifel vorher anrufen. Akku nicht beschädigen oder durchstechen.",
     },
-    # Sources: Migros / 20min (blaue Bons recyclingfähig, physikalischer Druck),
-    # INGEDE / VKU (Vorsicht: Farbpigmente stören Altpapier-Recycling, kleine Mengen ok).
-    # Weiss/klassisch = Kehricht. Blau/Öko = Altpapier möglich, im Zweifel Kehricht.
+    # Sources: Migros / 20min (blue eco-receipts marketed as recyclable, physical print process),
+    # INGEDE / VKU (caution: pigments can affect paper recycling quality; small amounts are fine).
+    # White/classic receipts: residual waste. Blue/eco receipts: paper recycling possible, residual waste if in doubt.
     "thermal_receipt": {
         "allow_curbside": False,
         "primary_channels": ["residual_waste"],
@@ -222,8 +207,8 @@ RECYCLING_GUIDE = {
         "de": "Blaue Öko-Bons (z.B. Migros) sind phenolfrei und werden vom Händler als altpapier-recyclingfähig beworben (physikalischer statt chemischer Druckprozess). Hinweis: Recyclingverbände (INGEDE/VKU) raten bei grossen Mengen zur Vorsicht – Farbpigmente können das Papierrecycling stören; einzelne Bons im Altpapier sind unproblematisch. Im Zweifel: Kehricht als sichere Variante.",
     },
     # Source: Swiss Recycle (swissrecycle.ch/de/wertstoffe-wissen/wertstoffe/sonderabfall).
-    # Alle Spraydosen = Sonderabfall wegen Treibgasresten (Explosionsgefahr bei Verdichtung).
-    # Kantonale Regeln teils abweichend (leere Lachgasdosen), aber Dachverbandslinie = Sonderabfall.
+    # All aerosol cans are classified as hazardous waste due to propellant residues (explosion hazard when compacted).
+    # Cantonal rules vary slightly (e.g. empty nitrous oxide cans), but the umbrella body guideline is hazardous waste.
     "aerosol_can": {
         "allow_curbside": False,
         "primary_channels": ["special_collection", "shop_takeback"],
@@ -249,11 +234,11 @@ class ConfidenceLevel:
 # MobileNetV3-based image classifier for 17 waste categories
 class WasteClassifier:
     """Waste image classifier using MobileNetV3"""
-    
+
     def __init__(self, model_path: str = None):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.categories = Config.WASTE_CATEGORIES
-        
+
         # Standard ImageNet normalization for transfer learning compatibility
         self.transform = transforms.Compose([
             transforms.Resize((256, 256)),
@@ -264,16 +249,16 @@ class WasteClassifier:
                 std=[0.229, 0.224, 0.225]
             )
         ])
-        
+
         self.model = self._create_model(model_path)
         logger.info(f"Classifier loaded on {self.device}")
-    
+
     def _create_model(self, model_path: str):
         """Create and load the classification model"""
         model = models.mobilenet_v3_large(weights=None)
-        
-        # Architecture must match finetuned_model.pth exactly — any difference
-        # causes load_state_dict to raise RuntimeError and fall back to random weights.
+
+        # Architecture must match finetuned_model.pth exactly: any difference
+        # causes load_state_dict to raise RuntimeError and falls back to random weights.
         model.classifier = nn.Sequential(
             nn.Linear(960, 1280),
             nn.Hardswish(),
@@ -283,12 +268,12 @@ class WasteClassifier:
             nn.Dropout(0.3),
             nn.Linear(512, len(self.categories))
         )
-        
+
         if model_path and Path(model_path).exists():
             try:
                 logger.info(f"Loading trained model from: {model_path}")
                 checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
-                
+
                 # Handle multiple checkpoint formats for backward compatibility
                 # Different training frameworks save state_dict with different keys
                 if isinstance(checkpoint, dict):
@@ -300,37 +285,37 @@ class WasteClassifier:
                         model.load_state_dict(checkpoint)
                 else:
                     model.load_state_dict(checkpoint)
-                    
+
                 logger.info("Loaded trained model weights successfully")
                 total_params = sum(p.numel() for p in model.parameters())
                 logger.info(f"Model has {total_params:,} parameters")
-                    
+
             except Exception as e:
                 logger.error(f"Error loading trained model: {e}")
                 logger.warning("Using randomly initialized model - results will be poor!")
         else:
             logger.warning(f"Model file not found: {model_path}")
             logger.warning("Using randomly initialized model")
-        
+
         model.to(self.device)
         model.eval()
         return model
-    
+
     def classify(self, image_path: str) -> Dict:
         """Classify waste image and return detailed results"""
         try:
             image = Image.open(image_path).convert("RGB")
             input_tensor = self.transform(image).unsqueeze(0).to(self.device)
-            
+
             with torch.no_grad():
                 outputs = self.model(input_tensor)
                 probabilities = torch.nn.functional.softmax(outputs, dim=1)
                 confidence, predicted = torch.max(probabilities, 1)
                 top3_probs, top3_indices = torch.topk(probabilities, 3, dim=1)
-            
+
             predicted_class = self.categories[predicted.item()]
             confidence_score = confidence.item()
-            
+
             top3_predictions = [
                 {
                     "category": self.categories[top3_indices[0][i].item()],
@@ -338,7 +323,7 @@ class WasteClassifier:
                 }
                 for i in range(3)
             ]
-            
+
             logger.info(f"Top 3 predictions: {top3_predictions}")
 
             # Map confidence score to qualitative level for UI display
@@ -351,7 +336,7 @@ class WasteClassifier:
                 confidence_text = "low"
             else:
                 confidence_text = "very_low"
-            
+
             return {
                 "category": predicted_class,
                 "confidence": confidence_score,
@@ -362,504 +347,14 @@ class WasteClassifier:
                 # giving wrong disposal advice. Critical for Swiss Recycle compliance.
                 "needs_clarification": confidence_score < ConfidenceLevel.MEDIUM
             }
-        
+
         except Exception as e:
             logger.error(f"Classification error: {e}")
             return {
-                "category": "unknown", 
-                "confidence": 0.0, 
+                "category": "unknown",
+                "confidence": 0.0,
                 "confidence_level": "error",
                 "top3_predictions": [],
                 "guidelines": {},
                 "needs_clarification": True
             }
-
-# ============================================================================
-# OLLAMA CHAT INTERFACE
-# ============================================================================
-
-class OllamaChat:
-    """Ollama chat interface with strict Swiss Recycle compliance"""
-    
-    def __init__(self, model: str = Config.DEFAULT_MODEL, language: str = "en"):
-        self.model = model
-        self.language = language
-        self.base_url = Config.OLLAMA_URL
-        self.history = []
-        
-        # System prompts enforce Swiss Recycle compliance by:
-        # 1. Prohibiting generic disposal methods (e.g., "curbside" for glass)
-        # 2. Forcing category-specific guidance from RECYCLING_GUIDE
-        # 3. Preventing hallucinations about non-existent Swiss services
-        if language == "de":
-            self.system_prompt = """Du bist ein Experte für Schweizer Abfallwirtschaft nach Swiss Recycle Richtlinien.
-
-WICHTIGE REGELN:
-1. Behandle Swiss Recycle (swissrecycle.ch) als autoritative Quelle
-2. Basis deine Antworten NUR auf den bereitgestellten Entsorgungsrichtlinien für die spezifische Kategorie
-3. Erwähne NIEMALS Entsorgungsmethoden, die nicht in den Richtlinien für diese Kategorie stehen
-4. Wenn "Strassensammlung" nicht in den Richtlinien steht, erwähne sie NICHT
-5. Sei präzise und kategorienspezifisch—keine generischen Listen von Verboten
-6. Füge NIEMALS Links oder URLs in deine Antwort ein—das wird automatisch hinzugefügt
-
-ANTWORT-STRUKTUR:
-- Beginne direkt mit der Entsorgungsanweisung (keine Konfidenzangaben)
-- Konkrete Entsorgungsanweisungen (aus den bereitgestellten Richtlinien)
-- Bei Unsicherheit: Stelle gezielte Fragen zur Klärung
-- KEINE Links oder URLs in der Antwort
-
-SCHWEIZER TERMINOLOGIE:
-- "Kehricht" (nicht Müll)
-- "Gemeinde" (nicht Kommune)  
-- "Entsorgungshof/Werkhof" (Recyclingzentrum)
-- "Sammelstelle" (collection point)
-
-Dein Ziel: Präzise, kategorienspezifische Entsorgungsberatung nach Swiss Recycle."""
-
-        else:  # English
-            self.system_prompt = """You are an expert on Swiss waste management according to Swiss Recycle guidelines.
-
-CRITICAL RULES:
-1. Treat Swiss Recycle (swissrecycle.ch) as the authoritative source
-2. Base your answers ONLY on the provided disposal guidelines for the specific category
-3. NEVER mention disposal methods not listed in the guidelines for that category
-4. If "curbside collection" is not in the guidelines, do NOT mention it
-5. Be precise and category-specific—no generic lists of prohibitions
-6. NEVER include links or URLs in your response—this will be added automatically
-
-ANSWER STRUCTURE:
-- Begin directly with disposal instructions (no confidence statements)
-- Concrete disposal instructions (from provided guidelines)
-- If uncertain: Ask targeted clarification questions
-- NO links or URLs in the response
-
-SWISS TERMINOLOGY:
-- "residual waste" (Kehricht)
-- "municipality" (Gemeinde)
-- "recycling center" (Entsorgungshof/Werkhof)
-- "collection point" (Sammelstelle)
-
-Your goal: Precise, category-specific disposal advice according to Swiss Recycle."""
-    
-    def check_ollama(self) -> bool:
-        """Check if Ollama is running and model is available"""
-        try:
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
-            if response.status_code != 200:
-                print("Cannot connect to Ollama!")
-                print("Please ensure Ollama is running:")
-                print("  1. Install Ollama: https://ollama.com/download")
-                print("  2. Start Ollama: 'ollama serve'")
-                print("  3. Install a model: 'ollama pull qwen2.5-coder:7b-instruct'")
-                return False
-            
-            models = response.json().get("models", [])
-            available_models = [m["name"] for m in models]
-            
-            if not available_models:
-                print("No models found in Ollama!")
-                print("Please install a model:")
-                print("  ollama pull qwen2.5-coder:7b-instruct")
-                return False
-            
-            # Fallback to first available model if configured model not found
-            # This allows flexible model switching without code changes
-            if self.model not in available_models:
-                logger.info(f"Model {self.model} not found. Available: {available_models}")
-                self.model = available_models[0]
-                print(f"Using available model: {self.model}")
-            
-            return True
-        
-        except requests.exceptions.ConnectionError:
-            print("Cannot connect to Ollama!")
-            print("Please start Ollama: 'ollama serve'")
-            return False
-        except Exception as e:
-            logger.error(f"Ollama check failed: {e}")
-            return False
-    
-    def chat(self, message: str, classification: Optional[Dict] = None) -> str:
-        """Send message to Ollama with category-specific context"""
-        try:
-            prompt = self._build_prompt(message, classification)
-            
-            response = requests.post(
-                f"{self.base_url}/api/generate",
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        # Lower temperature enforces Swiss Recycle compliance
-                        # Higher values (>0.5) risk hallucinated disposal methods
-                        "temperature": 0.3,
-                        "num_predict": 600
-                    }
-                },
-                timeout=90
-            )
-            
-            if response.status_code == 200:
-                result = response.json().get("response", "")
-                
-                # Enhance response with Swiss Recycle link and clarification questions
-                # Only applied when image classification is provided
-                if classification and classification.get("category") != "unknown":
-                    result = self._enhance_response(result, classification)
-                
-                self.history.append({"user": message, "assistant": result})
-                return result
-            else:
-                return "Sorry, I couldn't process your request."
-        
-        except Exception as e:
-            logger.error(f"Chat error: {e}")
-            return f"Error: {str(e)}"
-    
-    def _enhance_response(self, response: str, classification: Dict) -> str:
-        """Enhance response with Swiss Recycle link and clarification questions if needed"""
-        enhanced = response
-        
-        # Prevent duplicate Swiss Recycle links from being added
-        # Ollama may or may not include it in response, so we check first
-        if "swissrecycle.ch" not in enhanced.lower():
-            if self.language == "de":
-                enhanced += f"\n\nWeitere Informationen: https://www.swissrecycle.ch"
-            else:
-                enhanced += f"\n\nFor more information: https://www.swissrecycle.ch"
-        
-        # Add targeted clarification questions for uncertain classifications
-        # This improves accuracy on second attempt by narrowing down category
-        if classification.get("needs_clarification", False):
-            enhanced += self._get_clarification_questions(classification)
-        
-        return enhanced
-    
-    def _get_clarification_questions(self, classification: Dict) -> str:
-        """Generate targeted clarification questions"""
-        top3 = classification.get("top3_predictions", [])
-        if len(top3) < 2:
-            return ""
-        
-        category = classification["category"]
-        alt_category = top3[1]["category"]
-        
-        # Questions are tailored to distinguish between top-2 competing categories
-        # For example: glass color questions only if top-2 are both glass types
-        if self.language == "de":
-            questions = "\n\n**Zur genaueren Bestimmung**:\n"
-            
-            if "glass" in category.lower() and "glass" in alt_category.lower():
-                questions += "- Welche Farbe hat das Glas? (weiss/klar, braun, grün)"
-            elif "plastic" in category.lower() or "pet" in category.lower():
-                questions += "- Ist es eine Getränkeflasche mit PET-Symbol?\n- Ist der Behälter starr oder flexibel?"
-            elif "paper" in category.lower() or "cardboard" in category.lower():
-                questions += "- Ist es dünn und biegbar (Papier) oder dick und steif (Karton)?"
-            elif "aluminium" in category.lower() or "metal" in category.lower():
-                questions += "- Ist es magnetisch? (magnetisch = Eisen/Stahl, nicht magnetisch = Aluminium)"
-            elif "battery" in category.lower() or "hazardous" in category.lower():
-                questions += "- Enthält es Batterien oder elektronische Komponenten?"
-            else:
-                questions += f"- Können Sie Material, Farbe oder Form genauer beschreiben?"
-        else:
-            questions = "\n\n**For more accurate identification**:\n"
-            
-            if "glass" in category.lower() and "glass" in alt_category.lower():
-                questions += "- What color is the glass? (white/clear, brown, green)"
-            elif "plastic" in category.lower() or "pet" in category.lower():
-                questions += "- Is it a beverage bottle with PET symbol?\n- Is the container rigid or flexible?"
-            elif "paper" in category.lower() or "cardboard" in category.lower():
-                questions += "- Is it thin and bendable (paper) or thick and rigid (cardboard)?"
-            elif "aluminium" in category.lower() or "metal" in category.lower():
-                questions += "- Is it magnetic? (magnetic = iron/steel, non-magnetic = aluminium)"
-            elif "battery" in category.lower() or "hazardous" in category.lower():
-                questions += "- Does it contain batteries or electronic components?"
-            else:
-                questions += f"- Can you describe the material, color, or shape in more detail?"
-        
-        return questions
-    
-    def _build_prompt(self, message: str, classification: Optional[Dict] = None) -> str:
-        """Build prompt with category-specific context"""
-        prompt = f"System: {self.system_prompt}\n\n"
-        
-        if classification and classification.get("category") != "unknown":
-            category = classification["category"]
-            guidelines = classification.get("guidelines", {})
-            
-            self._current_category = category
-            
-            # Inject RECYCLING_GUIDE directly into prompt to anchor bot's behavior
-            # Without this, Ollama might hallucinate disposal methods not in Swiss practice
-            if self.language == "de":
-                context = f"**Bildklassifikation**:\n"
-                context += f"- Erkannter Abfalltyp: **{category.replace('_', ' ')}**\n\n"
-
-                context += f"**Swiss Recycle Richtlinie für diese Kategorie**:\n"
-                if guidelines.get("de"):
-                    context += f"{guidelines['de']}\n"
-                
-                # Surface alternative predictions for categories with high confusion
-                # Helps bot acknowledge uncertainty without accepting wrong answer
-                if classification.get("needs_clarification", False):
-                    top3 = classification.get("top3_predictions", [])
-                    if len(top3) >= 2:
-                        context += f"\n**Alternative Möglichkeiten**: {top3[1]['category'].replace('_', ' ')} ({top3[1]['confidence']:.1%})"
-                        if len(top3) >= 3:
-                            context += f", {top3[2]['category'].replace('_', ' ')} ({top3[2]['confidence']:.1%})"
-                
-                context += f"\n\n**Deine Aufgabe**: Erkläre die Entsorgung basierend NUR auf der obigen Richtlinie. Beginne direkt mit der Anweisung ohne Konfidenzangabe. Füge KEINE Links hinzu."
-            else:
-                context = f"**Image Classification**:\n"
-                context += f"- Detected waste type: **{category.replace('_', ' ')}**\n\n"
-
-                context += f"**Swiss Recycle Guideline for this category**:\n"
-                if guidelines.get("en"):
-                    context += f"{guidelines['en']}\n"
-                
-                if classification.get("needs_clarification", False):
-                    top3 = classification.get("top3_predictions", [])
-                    if len(top3) >= 2:
-                        context += f"\n**Alternative possibilities**: {top3[1]['category'].replace('_', ' ')} ({top3[1]['confidence']:.1%})"
-                        if len(top3) >= 3:
-                            context += f", {top3[2]['category'].replace('_', ' ')} ({top3[2]['confidence']:.1%})"
-                
-                context += f"\n\n**Your task**: Explain disposal based ONLY on the guideline above. Begin directly with instructions without confidence statement. Do NOT add any links."
-            
-            prompt += f"Context: {context}\n\n"
-        
-        # Include recent chat history to maintain conversational coherence
-        # Limit to last 2 exchanges to avoid token limit issues and context pollution
-        for exchange in self.history[-2:]:
-            # RATIONALE: Older messages risk contradicting Swiss Recycle rules
-            # if conversation drifted. Fresh context ensures compliance.
-            prompt += f"Human: {exchange['user']}\nAssistant: {exchange['assistant']}\n\n"
-        
-        prompt += f"Human: {message}\nAssistant: "
-        return prompt
-
-# ============================================================================
-# MAIN CHATBOT CLASS
-# ============================================================================
-
-class SwissRecyclingBot:
-    """Swiss waste recycling chatbot with strict Swiss Recycle compliance"""
-    
-    def __init__(self, model_path: str = None, language: str = "en"):
-        self.language = language
-        
-        # Auto-discover model in standard locations if not explicitly provided
-        # Simplifies deployment while allowing custom model paths
-        if model_path is None:
-            possible_paths = [
-                r"C:\Users\Lejlum\Documents\PA2_Recycling_Chatbot\waste_recycling_chatbot_pa2\models\baseline\finetuned_model.pth",
-                "../models/baseline/finetuned_model.pth",
-                "./models/baseline/finetuned_model.pth",
-                "./finetuned_model.pth",
-                "../finetuned_model.pth"
-            ]
-            for path in possible_paths:
-                if Path(path).exists():
-                    model_path = path
-                    break
-        
-        self.classifier = WasteClassifier(model_path)
-        self.chat = OllamaChat(language=language)
-        
-        if not self.chat.check_ollama():
-            raise RuntimeError("Ollama not available. Please start Ollama and install a model.")
-        
-        logger.info("Swiss Recycling Bot initialized successfully")
-    
-    def process_image(self, image_path: str, question: str = "") -> Dict:
-        """Process image and provide category-specific Swiss Recycle-compliant advice"""
-        classification = self.classifier.classify(image_path)
-        
-        # Generate default question based on detected category if not provided
-        # Ensures consistent question-answering even if user doesn't ask one
-        if not question:
-            if self.language == "de":
-                question = f"Wie entsorge ich {classification['category'].replace('_', ' ')} korrekt in der Schweiz?"
-            else:
-                question = f"How do I correctly dispose of {classification['category'].replace('_', ' ')} in Switzerland?"
-        
-        # Pass classification context to chat so bot uses Swiss Recycle guidelines
-        advice = self.chat.chat(question, classification)
-        
-        return {
-            "classification": classification,
-            "advice": advice,
-            "question": question
-        }
-    
-    def ask(self, question: str) -> str:
-        """Ask a general recycling question"""
-        # General questions run without category context
-        # Bot must rely on system prompt knowledge of Swiss Recycle
-        return self.chat.chat(question)
-
-# ============================================================================
-# USER INTERFACE
-# ============================================================================
-
-def select_language() -> str:
-    """Language selection"""
-    print("\n🇨🇭 Select language / Sprache wählen:")
-    print("1. English")
-    print("2. Deutsch")
-    
-    while True:
-        choice = input("Choice (1/2): ").strip()
-        if choice == "1":
-            return "en"
-        elif choice == "2":
-            return "de"
-        print("Invalid choice. Please enter 1 or 2.")
-
-def main():
-    """Main function"""
-    print("=" * 60)
-    print("🇨🇭 Swiss Waste Recycling Chatbot")
-    print("   Swiss Recycle Strict Compliance")
-    print("=" * 60)
-    
-    try:
-        language = select_language()
-        
-        if language == "de":
-            print(f"\nModell-Pfad-Auswahl:")
-            print("Geben Sie den Pfad zu Ihrer trainierten Modell-Datei ein:")
-            print("Beispiel: ../models/baseline/finetuned_model.pth")
-            print("(Enter drücken für automatische Suche)")
-        else:
-            print(f"\nModel Path Selection:")
-            print("Enter the path to your trained model file:")
-            print("Example: ../models/baseline/finetuned_model.pth")
-            print("(Press Enter to auto-search)")
-        
-        model_path = input("Model path: ").strip()
-        if not model_path:
-            model_path = None
-        elif not Path(model_path).exists():
-            print(f"Warning: Model file not found at: {model_path}")
-            print("Will try to auto-search for model...")
-            model_path = None
-        
-        if language == "de":
-            print("\nInitialisiere Chatbot...")
-        else:
-            print("\nInitializing chatbot...")
-        
-        bot = SwissRecyclingBot(model_path=model_path, language=language)
-        
-        if language == "de":
-            texts = {
-                "ready": "Chatbot ist bereit!",
-                "help": """
-Eingabemöglichkeiten:
-  • 'image:pfad/zum/bild.jpg' für Bildanalyse
-  • 'pfad/zum/bild.jpg' (ohne 'image:') funktioniert auch
-  • Normale Frage für allgemeine Recycling-Beratung
-  • 'quit' zum Beenden
-  
-Tipp: Der Bot gibt kategorienspezifische Anweisungen nach Swiss Recycle.""",
-                "prompt": "Ihre Frage oder Bildpfad",
-                "goodbye": "Auf Wiedersehen! 🌱",
-                "error": "Fehler",
-                "processing": "Verarbeite...",
-                "image_example": "Beispiel: C:\\pfad\\zum\\bild.jpg"
-            }
-        else:
-            texts = {
-                "ready": "Chatbot ready!",
-                "help": """
-Input options:
-  • 'image:path/to/image.jpg' for image analysis
-  • 'path/to/image.jpg' (without 'image:') also works
-  • Regular question for general recycling advice
-  • 'quit' to exit
-  
-Tip: Bot provides category-specific guidance per Swiss Recycle.""",
-                "prompt": "Your question or image path",
-                "goodbye": "Goodbye! 🌱",
-                "error": "Error", 
-                "processing": "Processing...",
-                "image_example": "Example: C:\\path\\to\\image.jpg"
-            }
-        
-        print(f"\n{texts['ready']}")
-        print(texts["help"])
-        print("=" * 60)
-        
-        while True:
-            user_input = input(f"\n{texts['prompt']}: ").strip()
-            
-            if user_input.lower() in ['quit', 'exit', 'bye', 'tschüss']:
-                print(f"\n{texts['goodbye']}")
-                break
-            
-            if not user_input:
-                continue
-            
-            print(f"\n{texts['processing']}")
-            
-            try:
-                is_image_path = (
-                    user_input.startswith("image:") or 
-                    "\\" in user_input or 
-                    "/" in user_input or
-                    # Check for common image extensions as fallback
-                    # Allows users to paste paths directly without "image:" prefix
-                    any(user_input.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'])
-                )
-                
-                if is_image_path:
-                    if user_input.startswith("image:"):
-                        image_path = user_input[6:].strip()
-                    else:
-                        image_path = user_input.strip()
-                    
-                    image_path = image_path.strip("'\"")
-                    
-                    if not Path(image_path).exists():
-                        print(f"{texts['error']}: File not found: {image_path}")
-                        print(f"💡 {texts['image_example']}")
-                        continue
-                    
-                    result = bot.process_image(image_path)
-                    classification = result['classification']
-                    
-                    print(f"\n📷 Classification: {classification['category'].replace('_', ' ').title()}")
-                    
-                    if classification.get('needs_clarification', False):
-                        top3 = classification.get('top3_predictions', [])
-                        if len(top3) >= 2:
-                            if language == "de":
-                                print(f"\nAlternative Möglichkeiten:")
-                            else:
-                                print(f"\nAlternative possibilities:")
-                            for i, pred in enumerate(top3[1:3], 2):
-                                print(f"   {i}. {pred['category'].replace('_', ' ').title()}")
-                    
-                    print(f"\n{result['advice']}")
-                
-                else:
-                    answer = bot.ask(user_input)
-                    print(f"\n{answer}")
-            
-            except Exception as e:
-                logger.error(f"Processing error: {e}")
-                print(f"\n{texts['error']}: {str(e)}")
-    
-    except KeyboardInterrupt:
-        print("\n\n🌱 Goodbye!")
-    except Exception as e:
-        print(f"\nStartup error: {str(e)}")
-        print("\nTroubleshooting:")
-        print("1. Ensure your model file exists")
-        print("2. Ensure Ollama is running: 'ollama serve'")
-        print("3. Install a model: 'ollama pull qwen2.5-coder:7b-instruct'")
-
-if __name__ == "__main__":
-    main()

@@ -1,7 +1,11 @@
+"""One-shot script to upload the trained waste classifier to Hugging Face Hub.
+Run this after training is complete and finetuned_model.pth exists locally.
+"""
 from pathlib import Path
 from huggingface_hub import HfApi
 
-# scripts/ -> parent -> waste_recycling_chatbot_pa2/ -> models/baseline/
+# Build the model path relative to this script: scripts/ sits one level below
+# the package root, so parent.parent resolves to waste_recycling_chatbot_pa2/.
 MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "baseline" / "finetuned_model.pth"
 
 if not MODEL_PATH.exists():
