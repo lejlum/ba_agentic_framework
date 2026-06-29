@@ -82,6 +82,19 @@ CATEGORY_LABELS: dict = {
     "white_glass_metal":         {"de": "Weissglas mit Metallverschluss",     "en": "White Glass with Metal Lid"},
 }
 
+# ---------------------------------------------------------------------------
+# MAP COMPONENT CACHE
+# ---------------------------------------------------------------------------
+# Caches the map_widget component keyed by message id (mid, a uuid4 hex).
+# Goal: return the *same* Python object on re-renders so Dash serialises
+# byte-for-byte identical JSON → React reconciliation has no reason to
+# unmount/remount the iframe.  The key= props on the widget div and the
+# Iframe are the actual mechanism that helps React avoid re-mounting.
+# Safety: mids are uuid4 hex strings generated once at message creation;
+# new-chat sessions get new mids, so no stale/wrong-location data ever
+# surfaces from the cache.  Capped at _MAP_CACHE_MAX entries to bound RAM.
+_MAP_COMPONENT_CACHE: dict = {}
+_MAP_CACHE_MAX = 100
 
 # ---------------------------------------------------------------------------
 # UI TEXT
@@ -881,19 +894,25 @@ def render_chat(language, sessions, active_session, city):
                         f"Use the filters on the map to find specific collection points "
                         f"for aluminium, glass, cardboard, PET, hazardous waste, and more."
                     )
-                # Build a stable URL — browser never reloads an iframe whose src
-                # attribute stays identical, unlike srcDoc which re-evaluates aggressively.
-                lat_part = f"&lat={lat_used}" if lat_used is not None else ""
-                lon_part = f"&lon={lon_used}" if lon_used is not None else ""
-                map_src = f"/map?city={url_quote(city_used)}&lang={lang_used}{lat_part}{lon_part}"
-                map_widget = html.Div([
-                    html.Div(get_texts(lang_used)["map_title"], style={"fontWeight": "600", "fontSize": "14px", "color": "#1e40af", "marginBottom": "8px"}),
-                    html.Iframe(
-                        id=f"map-iframe-{mid}",
-                        src=map_src,
-                        style={"width": "100%", "height": "340px", "border": "none", "borderRadius": "8px"},
-                    ),
-                ], className="map-card", style={"width": "100%"})
+                if mid not in _MAP_COMPONENT_CACHE:
+                    # Build a stable URL — browser never reloads an iframe whose src
+                    # stays identical, unlike srcDoc which re-evaluates aggressively.
+                    lat_part = f"&lat={lat_used}" if lat_used is not None else ""
+                    lon_part = f"&lon={lon_used}" if lon_used is not None else ""
+                    map_src = f"/map?city={url_quote(city_used)}&lang={lang_used}{lat_part}{lon_part}"
+                    _widget = html.Div([
+                        html.Div(get_texts(lang_used)["map_title"], style={"fontWeight": "600", "fontSize": "14px", "color": "#1e40af", "marginBottom": "8px"}),
+                        html.Iframe(
+                            key=f"iframe-{mid}",
+                            id=f"map-iframe-{mid}",
+                            src=map_src,
+                            style={"width": "100%", "height": "340px", "border": "none", "borderRadius": "8px"},
+                        ),
+                    ], key=f"mapwidget-{mid}", className="map-card", style={"width": "100%"})
+                    if len(_MAP_COMPONENT_CACHE) >= _MAP_CACHE_MAX:
+                        _MAP_COMPONENT_CACHE.pop(next(iter(_MAP_COMPONENT_CACHE)))
+                    _MAP_COMPONENT_CACHE[mid] = _widget
+                map_widget = _MAP_COMPONENT_CACHE[mid]
                 return html.Div([
                     html.Img(src="/assets/robo_head.png", style=AVATAR),
                     html.Div([
