@@ -57,6 +57,10 @@ was evaluated and discarded in favour of GPT-4o for reliability and output quali
 - Hosted on Hugging Face Hub at `le7lum/swiss-waste-classifier`, downloaded at
   runtime via `hf_hub_download`
 
+The classifier was fine-tuned from the EcoVision base model (MobileNetV3-Large,
+10 original categories). The notebook `ecovision_mobilenetv3/Model.ipynb` demonstrates
+the original base model for reference and documents the transfer learning starting point.
+
 ### Map and Collection Points
 
 Collection points are displayed on a Leaflet map embedded in the dashboard as an
