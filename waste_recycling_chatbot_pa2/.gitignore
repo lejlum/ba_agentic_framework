@@ -1,5 +1,4 @@
 .env
-upload_model.py
 .DS_Store
 .vscode/
 data/
@@ -296,3 +295,7 @@ bh_unicode_properties.cache
 # Sublime-github package stores a github token in this file
 # https://packagecontrol.io/packages/sublime-github
 GitHub.sublime-settings
+
+# Modelldateien - liegen auf HF Hub, nicht im Repo
+*.pth
+**/models/

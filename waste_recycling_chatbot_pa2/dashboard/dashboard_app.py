@@ -42,7 +42,7 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from chatbot.swiss_waste_agent import build_agent, AgentState
-from chatbot.improved_swiss_waste_chatbot_opensource import Config
+from chatbot.knowledge_base import Config
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)

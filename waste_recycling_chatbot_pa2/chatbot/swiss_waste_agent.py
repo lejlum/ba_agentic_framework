@@ -18,7 +18,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from chatbot.improved_swiss_waste_chatbot_opensource import WasteClassifier, RECYCLING_GUIDE
+from chatbot.knowledge_base import WasteClassifier, RECYCLING_GUIDE
 
 load_dotenv()
 
