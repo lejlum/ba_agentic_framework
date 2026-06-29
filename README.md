@@ -1,3 +1,13 @@
+---
+title: Swiss Recycling Assistant
+emoji: ♻️
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_file: app.py
+pinned: false
+---
+
 # Swiss Waste Recycling Assistant
 
 Bachelor Thesis, ZHAW Life Sciences und Facility Management  
